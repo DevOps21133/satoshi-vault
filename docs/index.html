@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Satoshi Vault — air-gapped Bitcoin wallet</title>
-<meta name="description" content="A security-first, Bitcoin-only, air-gapped wallet system. Cold Signer + watch-only Wallet, QR-only signing channel. No telemetry, no cloud, no KYC — ever.">
+<title>Satoshi Vault — the most secure Bitcoin wallet on Earth</title>
+<meta name="description" content="The most secure Bitcoin wallet on Earth: a cold, air-gapped Signer and a watch-only Wallet connected only by QR codes. Open source, no telemetry, no cloud, no KYC — ever.">
 <meta name="theme-color" content="#0d0b08">
 <link rel="icon" type="image/png" href="icon-signer.png">
-<meta property="og:title" content="Satoshi Vault">
+<meta property="og:title" content="Satoshi Vault — the most secure Bitcoin wallet on Earth">
 <meta property="og:description" content="Air-gapped Bitcoin wallet: cold Signer + watch-only Wallet, connected only by QR codes. Open source, no telemetry, no cloud, no KYC.">
 <meta property="og:image" content="https://devops21133.github.io/satoshi-vault/icon-signer.png">
 <meta property="og:type" content="website">
@@ -72,9 +72,19 @@
   }
   .wordmark .a{color:var(--orange);display:block}
   .wordmark .b{color:var(--paper);display:block}
-  .tagline{
-    margin:22px auto 0;max-width:660px;font-size:clamp(17px,2.4vw,21px);color:#e8e0d6;
+  .claim{
+    margin:26px auto 0;max-width:720px;
+    font-size:clamp(21px,3.4vw,30px);line-height:1.25;font-weight:800;
+    letter-spacing:.03em;color:var(--orange);
+    text-shadow:0 0 38px rgba(247,147,26,.28);
   }
+  .tagline{
+    margin:18px auto 0;max-width:660px;font-size:clamp(16px,2.2vw,19px);color:#e8e0d6;
+  }
+  .hero-verify{
+    margin:26px auto 0;max-width:620px;font-size:14.5px;color:var(--muted);
+  }
+  .hero-verify a{font-family:var(--mono);font-size:13.5px;word-break:break-all}
   .subline{
     margin:14px auto 0;max-width:640px;font-size:15px;color:var(--muted);
     letter-spacing:.04em;
@@ -170,6 +180,21 @@
   .step h3{margin-bottom:4px}
   .step p{margin:0;font-size:15px;color:#c8bfb5}
 
+  /* ---------- verify ---------- */
+  .repo-btn{
+    display:inline-block;margin-top:8px;padding:17px 40px;border-radius:12px;
+    text-decoration:none;
+  }
+  .repo-btn:hover{text-decoration:none;filter:brightness(1.07)}
+  .verify-links{
+    display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:26px;
+  }
+  .verify-links a{
+    font-size:13.5px;letter-spacing:.06em;color:#ded5cb;text-decoration:none;
+    border:1px solid var(--line);border-radius:999px;padding:8px 16px;
+  }
+  .verify-links a:hover{border-color:var(--orange);color:var(--orange);text-decoration:none}
+
   /* ---------- donate / footer ---------- */
   .addr{
     font-family:var(--mono);font-size:clamp(12px,2.4vw,15px);
@@ -210,14 +235,19 @@
       <img src="icon-wallet.png" alt="Satoshi Vault Wallet icon">
     </div>
     <h1 class="wordmark"><span class="a">SATOSHI</span><span class="b">VAULT</span></h1>
-    <p class="tagline">A security-first, Bitcoin-only, <strong>air-gapped</strong> wallet system.</p>
-    <p class="subline">Cold Signer + watch-only Wallet · QR-only signing channel · No telemetry, no cloud, no KYC — ever.</p>
+    <p class="claim">The most secure Bitcoin wallet on Earth.</p>
+    <p class="tagline">Security-first, Bitcoin-only, <strong>air-gapped</strong> — a cold Signer and a watch-only Wallet that speak to each other in nothing but QR codes.</p>
+    <p class="subline">No telemetry, no cloud, no accounts, no KYC — ever.</p>
     <ul class="badges">
       <li>Bitcoin only</li>
       <li>Open source · MIT</li>
       <li>No accounts</li>
       <li>Runs offline</li>
     </ul>
+    <p class="hero-verify">
+      Big claim. So read it yourself — every line is public:
+      <a href="https://github.com/DevOps21133/satoshi-vault">github.com/DevOps21133/satoshi-vault</a>
+    </p>
   </div>
 </header>
 
@@ -409,6 +439,36 @@
         </ul>
       </div>
     </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="verify">
+  <div class="wrap" style="max-width:820px;text-align:center">
+    <p class="eyebrow">Verify, don't trust</p>
+    <h2>We call it the most secure Bitcoin wallet on Earth. Don't take our word for it.</h2>
+    <p>
+      A wallet you cannot read is a wallet you have to trust, and trust is the thing Bitcoin was
+      built to remove. Satoshi Vault is <strong>MIT-licensed and written from scratch</strong> —
+      no code copied from any other wallet project — so every claim on this page is a file you
+      can open right now.
+    </p>
+    <a class="btn btn-primary repo-btn" href="https://github.com/DevOps21133/satoshi-vault">View the source on GitHub</a>
+    <div class="verify-links">
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/THREAT_MODEL.md">Threat model</a>
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/CRYPTOGRAPHY.md">Every crypto composition</a>
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/DEPENDENCIES.md">Dependency audit</a>
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/AUDIT_CHECKLIST.md">Auditor's checklist</a>
+      <a href="https://github.com/DevOps21133/satoshi-vault/tree/main/packages/core/test">The test suite</a>
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/apk/SHA256SUMS.txt">APK checksums</a>
+    </div>
+    <p class="muted" style="font-size:14px;margin-top:26px">
+      Clone it, run <code>npm test</code> — the official BIP39/BIP32/BIP143/BIP341 vectors run
+      on your machine, not ours — and build the APKs yourself. Found a flaw?
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/SECURITY.md">Report it privately</a>
+      and it gets fixed.
+    </p>
   </div>
 </section>
 

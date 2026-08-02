@@ -4,9 +4,13 @@
 
 # SATOSHI VAULT
 
-**A security-first, Bitcoin-only, air-gapped wallet system.**
+### The most secure Bitcoin wallet on Earth.
 
-*Cold Signer + Watch-Only Wallet · QR-only signing channel · No telemetry, no cloud, no KYC — ever.*
+**Security-first, Bitcoin-only, air-gapped — a cold Signer and a watch-only Wallet that speak to each other in nothing but QR codes.**
+
+*No telemetry, no cloud, no accounts, no KYC — ever.*
+
+Big claim. Every line is public, MIT-licensed and written from scratch — so verify it: [threat model](docs/THREAT_MODEL.md) · [cryptography](docs/CRYPTOGRAPHY.md) · [dependencies](docs/DEPENDENCIES.md) · [audit checklist](docs/AUDIT_CHECKLIST.md) · [tests](packages/core/test)
 
 **[satoshi-vault website →](https://devops21133.github.io/satoshi-vault/)** · [download the APKs](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)
 
