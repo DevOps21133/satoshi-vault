@@ -56,6 +56,15 @@ npm run dev -w @satoshivault/wallet   # http://localhost:5181
 
 Production bundles (`npm run build`) are fully static — serve `apps/*/dist` from any static host, or open them from a USB stick on the air-gapped machine.
 
+### Android APKs
+
+Every push to `main` builds installable test APKs ([Releases → `apk-latest`](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)):
+
+- **`satoshi-vault-signer.apk`** — declares **no INTERNET permission**: Android itself denies the app any network socket, enforcing the air gap at the OS level on top of the page's `connect-src 'none'` CSP. Cloud backup and device-to-device transfer of the encrypted vault are disabled.
+- **`satoshi-vault-wallet.apk`** — INTERNET + CAMERA only.
+
+These are debug-signed test builds: enable "install unknown apps", verify the `SHA256SUMS.txt`, and uninstall the previous build before installing a newer one.
+
 ### Intended deployment
 
 1. Build `apps/signer/dist`, copy it to a device that will **never touch a network again** (old phone/laptop, radios off).

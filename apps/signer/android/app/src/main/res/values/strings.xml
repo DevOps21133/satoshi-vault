@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Satoshi Vault Signer</string>
+    <string name="title_activity_main">Satoshi Vault Signer</string>
+    <string name="package_name">app.satoshivault.signer</string>
+    <string name="custom_url_scheme">app.satoshivault.signer</string>
+</resources>

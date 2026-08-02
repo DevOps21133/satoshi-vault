@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Satoshi Vault Wallet</string>
+    <string name="title_activity_main">Satoshi Vault Wallet</string>
+    <string name="package_name">app.satoshivault.wallet</string>
+    <string name="custom_url_scheme">app.satoshivault.wallet</string>
+</resources>

@@ -10,10 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@satoshivault/core": "*",
     "@satoshivault/ui": "*"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
   }
