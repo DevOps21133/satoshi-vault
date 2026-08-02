@@ -1,0 +1,25 @@
+{
+  "name": "satoshi-vault",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SATOSHI VAULT — a security-first, Bitcoin-only, air-gapped wallet system (offline Signer + watch-only Wallet)",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @satoshivault/core && npm run build -w @satoshivault/signer && npm run build -w @satoshivault/wallet",
+    "test": "npm run test -w @satoshivault/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint packages apps --ext .ts"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "eslint": "^9.32.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
