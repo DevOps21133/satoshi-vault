@@ -42,6 +42,16 @@ The only channel between them is **animated QR codes**, in both directions. The 
 - **Device hardening** (Signer): `FLAG_SECURE` on every screen — no screenshots, no screen recording, no thumbnail in the recents list; locks within 30 seconds of going to the background and immediately on page hide; the shipped APKs are **not debuggable**, so `adb run-as` cannot read the encrypted vault and WebView remote debugging is off.
 - **Zero** telemetry, analytics, cloud services, accounts, or tracking of any kind.
 
+## Screenshots
+
+<div align="center">
+
+<img src="docs/screenshots/wallet-home.jpg" alt="Satoshi Vault Wallet — account overview" width="264"> <img src="docs/screenshots/wallet-receive.jpg" alt="Satoshi Vault Wallet — receive card with fingerprint and derivation path" width="264">
+
+</div>
+
+The watch-only Wallet on Android: the account overview, and the receive card — which prints the master fingerprint and the account derivation path so the address can be checked against the Signer before receiving. There are no Signer screenshots because there can't be: the Signer sets `FLAG_SECURE`, so Android refuses to capture its screens at all.
+
 ## Quick start
 
 Requires Node.js ≥ 20.
