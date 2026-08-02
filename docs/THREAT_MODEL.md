@@ -51,6 +51,12 @@ The Signer treats the Wallet as an adversary:
 - **The trusted display is the Signer's**: recipient addresses, amounts, and
   the fee are rendered on the air-gapped screen before signing. User guidance
   in both apps says to verify **there**.
+- **A fee-drain needs a second confirmation**: the Signer computes the
+  effective sat/vB and the fee as a share of the coins being spent, and a
+  transaction that is abnormal on any axis (>100k sat, >300 sat/vB, >10% of
+  the input value) is flagged in red and cannot be signed on the first press.
+  It is a warning rather than a cap, so a legitimately urgent high fee remains
+  possible — with the number stated on the confirm button.
 - **The signed result can't be tampered**: the Wallet's `verifySignedTx`
   refuses to broadcast anything that differs from the reviewed PSBT — and
   even if malware bypasses its own check, the signatures only cover the
@@ -82,13 +88,20 @@ The Signer treats the Wallet as an adversary:
 - The optional **BIP39 passphrase is never persisted** — even the correct
   vault password reveals only the base wallet, not the passphrase wallet
   (plausible deniability / duress layer).
+- The shipped Android builds are **not debuggable**, so a thief with a USB
+  cable cannot pull the vault blob out of private storage with `adb run-as`,
+  and WebView remote debugging (`chrome://inspect`) is unavailable — that
+  would otherwise mean arbitrary JS inside an unlocked Signer.
 
 ### A4 — evil maid
 
 - Partially out of scope (a modified OS/browser can defeat any web app). The
-  static build can be served from read-only media; idle auto-lock (10 min)
-  limits the unlocked window; the ceremony quiz forces the words through the
-  user's hands, not just the screen.
+  static build can be served from read-only media; the ceremony quiz forces
+  the words through the user's hands, not just the screen.
+- The unlocked window is bounded from three directions: idle auto-lock after
+  10 minutes, a 30-second lock once the app is backgrounded (short enough for
+  a pocketed phone, long enough to survive an OS permission dialog), and an
+  immediate lock on page hide.
 
 ### A5 — observation
 
@@ -96,6 +109,16 @@ The Signer treats the Wallet as an adversary:
   banner; the quiz confirms transcription. QR payloads never contain secrets
   (xpub, PSBT, signed tx only). The vault password is entered in masked
   fields.
+- A revealed seed auto-hides after 90 seconds and whenever the view is left,
+  so words cannot stay on screen unattended.
+- The Signer sets `FLAG_SECURE` on every screen: screenshots, screen
+  recorders and `MediaProjection` capture are blocked by Android itself, and
+  the recents-list thumbnail is blanked, so seed words cannot leak into a
+  screenshot gallery or a screen-sharing session. The Wallet does not set it
+  (no secrets, and users legitimately screenshot balances).
+- Residual: restoring a seed means typing into a text field, and Android
+  keyboards may retain words in a learning dictionary. Documented in the
+  README; restore on a device whose keyboard learning is off or cleared.
 
 ### A6 — supply chain
 
@@ -106,6 +129,13 @@ The Signer treats the Wallet as an adversary:
 - No framework, no post-install scripts, no native code.
 - The Signer's CSP blocks all network egress, so even a malicious dependency
   cannot exfiltrate from the cold side at runtime.
+- CI actions are pinned to full commit SHAs (a moved tag would otherwise run
+  third-party code in the job that builds the installable binaries), and the
+  build job runs with `contents: read` — only a separate publish job, which
+  handles nothing but finished artifacts, can write to the repository.
+- The build asserts against the **compiled APK**, not the source: the Signer
+  must have no `INTERNET` permission and neither app may be debuggable. A
+  dependency whose manifest merge reintroduces either one fails the build.
 
 ### A7 — malicious QR payloads
 
@@ -118,9 +148,11 @@ The Signer treats the Wallet as an adversary:
 
 Seed generation mixes **all** sensor sources into a SHA-256 sponge **together
 with 32 bytes of OS CSPRNG output**, and health-tests each source
-(repetition-count and adaptive-proportion tests). A stuck camera, silent mic,
-or hostile sensor can add zero entropy but can never subtract: the output is
-never weaker than the OS CSPRNG alone.
+(repetition-count and adaptive-proportion tests, plus a structural screen for
+periodic sources — a stuck 8-bit counter or an alternating pattern passes both
+800-90B tests while carrying no entropy, so it is rejected outright). A stuck
+camera, silent mic, or hostile sensor can add zero entropy but can never
+subtract: the output is never weaker than the OS CSPRNG alone.
 
 ## Explicit non-goals
 
