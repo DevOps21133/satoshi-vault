@@ -58,7 +58,7 @@ Production bundles (`npm run build`) are fully static — serve `apps/*/dist` fr
 
 ### Android APKs
 
-Every push to `main` builds installable test APKs ([Releases → `apk-latest`](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)):
+Installable APKs live **in this repository** under [`apk/`](apk/) — rebuilt and committed by CI on every push to `main`, and also published to [Releases → `apk-latest`](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest):
 
 - **`satoshi-vault-signer.apk`** — declares **no INTERNET permission**: Android itself denies the app any network socket, enforcing the air gap at the OS level on top of the page's `connect-src 'none'` CSP. Cloud backup and device-to-device transfer of the encrypted vault are disabled.
 - **`satoshi-vault-wallet.apk`** — INTERNET + CAMERA only.
