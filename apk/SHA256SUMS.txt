@@ -1,2 +1,2 @@
-89e0acdaebb6ad542c54e3dbec2dca81808c94737d2353d40d75330dec49261f  satoshi-vault-signer.apk
-01363233f2f74d888a88baa950c103a75a93f1c0a1af9f00e1b7b506b93d29b0  satoshi-vault-wallet.apk
+2dafe389ac6bf7874aa93d3296bd78edcc8f970a111645549d035e1ae9a90140  satoshi-vault-signer.apk
+500fc1060cb5d6d45923c73ca89b8848155adcfee9938a477993c0c57e8abb7c  satoshi-vault-wallet.apk
