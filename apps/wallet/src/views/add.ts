@@ -42,6 +42,22 @@ export function addView(app: AppCtx): View {
       el("button", { class: "ghost", onclick: () => app.show("home") }, "Cancel"),
     );
 
+    // A rejected transfer must NOT resume scanning: the Signer's animation
+    // keeps looping, so resuming would re-complete the same bad transfer and
+    // re-fire the same error forever. Stop, explain, offer a fresh start.
+    const fail = (message: string) => {
+      finished = true;
+      scanGen++;
+      scanner?.stop();
+      scanner = null;
+      clear(videoBox);
+      stats.textContent = "";
+      videoBox.append(
+        el("div", { class: "banner bad" }, message),
+        el("button", { class: "ghost", onclick: () => stepScan() }, "Scan Again"),
+      );
+    };
+
     const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
@@ -50,9 +66,7 @@ export function addView(app: AppCtx): View {
         if (p.total > 0) stats.textContent = `${p.received} / ${p.total} frames`;
       } catch (e) {
         if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
-        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
-        assembler.reset();
-        stats.textContent = "Transfer rejected — waiting for the Signer's export QR…";
+        fail(e instanceof Error ? e.message : "Corrupted transfer");
         return;
       }
       if (assembler.isComplete()) {
@@ -66,9 +80,7 @@ export function addView(app: AppCtx): View {
           scanner = null;
           stepLabel(data);
         } catch (e) {
-          toast(e instanceof Error ? e.message : "Invalid export");
-          assembler.reset();
-          finished = false;
+          fail(e instanceof Error ? e.message : "Invalid export");
         }
       }
     }).then((h) => {

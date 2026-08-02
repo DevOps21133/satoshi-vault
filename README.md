@@ -12,6 +12,10 @@
 
 ---
 
+## Why this exists
+
+**Satoshi Vault exists to protect people worldwide from getting their Bitcoin wallet hacked.** Most wallet thefts trace back to two root causes: seeds generated with weak or predictable randomness, and private keys living on internet-connected devices. Satoshi Vault attacks both — the seed is born in an **entropy ceremony that mixes many independent random sources** (camera noise, microphone noise, pointer motion, device motion, always combined with the OS CSPRNG, each source health-tested per NIST SP 800-90B), and the keys then live only on a **permanently air-gapped device** that is physically incapable of network I/O. Everyone deserves a wallet whose seed no attacker can predict and whose keys no attacker can reach.
+
 Satoshi Vault is two applications that together form an air-gapped Bitcoin wallet:
 
 | App | Runs | Holds | Does |
@@ -44,7 +48,7 @@ Requires Node.js ≥ 20.
 git clone https://github.com/DevOps21133/satoshi-vault
 cd satoshi-vault
 npm install
-npm test                      # 138 tests incl. official BIP vectors
+npm test                      # 148 tests incl. official BIP vectors
 
 npm run dev -w @satoshivault/signer   # http://localhost:5180  (put THIS device offline)
 npm run dev -w @satoshivault/wallet   # http://localhost:5181
@@ -89,6 +93,16 @@ Satoshi Vault is a from-scratch implementation. The entropy-ceremony and air-gap
 ## Reporting a vulnerability
 
 See [SECURITY.md](SECURITY.md). Please report privately before disclosure.
+
+## Donate ₿
+
+Satoshi Vault is free, open source, and will never monetize you — no telemetry, no accounts, no paid tiers. If it helps keep your bitcoin safe and you want to support development, donations are gratefully accepted:
+
+```
+bc1quh3humfcqfh7gh3v8d784e29av24y0vl540qcf
+```
+
+(Bitcoin mainnet, native SegWit P2WPKH. The same address is shown with a QR code in the Wallet app under **Settings → Support Development**.)
 
 ---
 

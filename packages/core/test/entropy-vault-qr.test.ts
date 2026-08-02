@@ -183,6 +183,17 @@ describe("QR chunk framing", () => {
     expect(() => asm.assemble()).toThrow(/hash mismatch/);
   });
 
+  it("large payloads auto-scale the frame size to fit MAX_FRAMES", () => {
+    const payload = new Uint8Array(900_000);
+    for (let i = 0; i < payload.length; i++) payload[i] = i & 0xff;
+    const frames = encodeChunks("PSBT", payload);
+    expect(frames.length).toBeLessThanOrEqual(2000);
+    const asm = new ChunkAssembler();
+    for (const f of frames) asm.add(f);
+    expect(asm.isComplete()).toBe(true);
+    expect(bytesToHex(asm.assemble().payload)).toBe(bytesToHex(payload));
+  });
+
   it("payload tampering is detected at assembly", () => {
     const payload = randomBytes(600);
     const frames = encodeChunks("TXN", payload, 300);

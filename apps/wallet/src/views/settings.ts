@@ -1,8 +1,11 @@
 /** Wallet settings: per-network Esplora endpoints, and the privacy story. */
 
-import { clear, el, toast } from "@satoshivault/ui";
+import { clear, el, renderQr, toast } from "@satoshivault/ui";
 import { AppCtx, View } from "../types";
 import { DEFAULT_ESPLORA, esploraUrl, networkNames, setEsploraUrl } from "../store";
+
+/** Project donation address (mainnet P2WPKH, checksum-verified in CI builds). */
+export const DONATION_ADDRESS = "bc1quh3humfcqfh7gh3v8d784e29av24y0vl540qcf";
 
 export function settingsView(_app: AppCtx): View {
   const body = el("div", {});
@@ -60,7 +63,27 @@ export function settingsView(_app: AppCtx): View {
         "It cannot spend anything by itself: every signature happens on the air-gapped Signer, over QR codes."),
     );
 
-    body.append(serversCard, aboutCard);
+    const donateCanvas = el("canvas", {}) as HTMLCanvasElement;
+    void renderQr(donateCanvas, `bitcoin:${DONATION_ADDRESS}`, 180);
+    const donateCard = el("div", { class: "card center" },
+      el("h2", {}, "Support Development ₿"),
+      el("p", { class: "dim small" },
+        "Satoshi Vault is free and open source. If it protects your bitcoin, " +
+        "consider donating a few sats to keep it maintained."),
+      el("div", { class: "qr-frame" }, donateCanvas),
+      el("div", { class: "addr" }, DONATION_ADDRESS),
+      el("button", {
+        class: "ghost small",
+        onclick: () => {
+          void navigator.clipboard.writeText(DONATION_ADDRESS).then(
+            () => toast("Donation address copied — thank you!"),
+            () => toast("Could not copy — select the address manually"),
+          );
+        },
+      }, "Copy Address"),
+    );
+
+    body.append(serversCard, aboutCard, donateCard);
   };
 
   render();

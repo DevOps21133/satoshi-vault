@@ -86,6 +86,23 @@ export function signView(app: AppCtx): View {
       el("button", { class: "ghost", onclick: () => app.show("home") }, "Cancel"),
     );
 
+    // A rejected transfer must NOT resume scanning: the sender's animation
+    // keeps looping, so resuming would re-complete the same bad transfer and
+    // re-fire the same error forever. Stop, explain, offer a fresh start.
+    const fail = (message: string) => {
+      finished = true;
+      scanGen++;
+      scanner?.stop();
+      scanner = null;
+      clear(videoBox);
+      fill.style.width = "0%";
+      stats.textContent = "";
+      videoBox.append(
+        el("div", { class: "banner bad" }, message),
+        el("button", { class: "ghost", onclick: () => stepScan() }, "Scan Again"),
+      );
+    };
+
     const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
@@ -98,10 +115,7 @@ export function signView(app: AppCtx): View {
       } catch (e) {
         if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
         // Anything else from the assembler is a tampering signal: surface it.
-        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
-        assembler.reset();
-        fill.style.width = "0%";
-        stats.textContent = "Transfer rejected — waiting for frames…";
+        fail(e instanceof Error ? e.message : "Corrupted transfer");
         return;
       }
       if (assembler.isComplete()) {
@@ -114,9 +128,7 @@ export function signView(app: AppCtx): View {
           scanner = null;
           stepReview(psbt);
         } catch (e) {
-          toast(e instanceof Error ? e.message : "Invalid transfer");
-          assembler.reset();
-          finished = false;
+          fail(e instanceof Error ? e.message : "Invalid transfer");
         }
       }
     }).then((h) => {
@@ -133,6 +145,25 @@ export function signView(app: AppCtx): View {
 
   // --- step 2: human review --------------------------------------------------
   const stepReview = (psbt: Psbt) => {
+    // A PSBT for another network parses fine but would render every address
+    // re-encoded for THIS network and flag its legitimate change as hostile.
+    // Detect the coin-type mismatch up front and say what is actually wrong.
+    if (isForeignNetworkPsbt(psbt, app.network)) {
+      clear(body);
+      body.append(
+        el(
+          "div",
+          { class: "card" },
+          el("h2", {}, "Wrong Network"),
+          el("div", { class: "banner bad" },
+            `This transaction was built for a different Bitcoin network than the one this signer is set to (${app.network.name}). ` +
+            "Switch the network in Settings, then scan it again. Nothing was signed."),
+        ),
+        el("button", { class: "primary", onclick: () => app.show("home") }, "Back"),
+      );
+      return;
+    }
+
     let fee: bigint;
     let inputs: { index: number; amount: bigint; spendType: string; address: string | null }[];
     try {
@@ -300,6 +331,37 @@ function derivePubkey(master: HDPrivateKey, path: number[]): Uint8Array {
 
 function formatPath(path: number[]): string {
   return "m/" + path.map((i) => (i >= HARDENED_OFFSET ? `${i - HARDENED_OFFSET}'` : `${i}`)).join("/");
+}
+
+/**
+ * True when the PSBT's derivation entries consistently declare a coin type
+ * for a DIFFERENT network than the signer is configured for (BIP44: 0' on
+ * mainnet, 1' on test networks). Mirrors validateSigningPath's rule, but at
+ * review time, so the user gets "wrong network" instead of a hostile-change
+ * warning full of re-encoded addresses.
+ */
+function isForeignNetworkPsbt(psbt: Psbt, network: Network): boolean {
+  const expectedCoin = (network.name === "mainnet" ? 0 : 1) + HARDENED_OFFSET;
+  let sawClaim = false;
+  for (const maps of [psbt.inputMaps, psbt.outputMaps]) {
+    for (const map of maps) {
+      if (!map) continue;
+      let derivations;
+      try {
+        derivations = maps === psbt.inputMaps
+          ? [...getBip32Derivations(map), ...getTapBip32Derivations(map)]
+          : [...getOutBip32Derivations(map), ...getOutTapBip32Derivations(map)];
+      } catch {
+        continue; // malformed maps are judged by the change classifier, not here
+      }
+      for (const d of derivations) {
+        if (d.path.length !== 5) continue;
+        sawClaim = true;
+        if (d.path[1] === expectedCoin) return false; // any matching claim → not a foreign-network PSBT
+      }
+    }
+  }
+  return sawClaim; // claims exist and none matches this network
 }
 
 /**

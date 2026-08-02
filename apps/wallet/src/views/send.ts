@@ -45,6 +45,7 @@ export function sendView(
 
   let animator: AnimatedQr | null = null;
   let scanner: ScannerHandle | null = null;
+  let feeEstimatesCache: Record<string, number> | null = null;
   // Bumped on every destroy so a camera start still in flight is stopped
   // instead of leaking a live camera with no owner.
   let scanGen = 0;
@@ -196,15 +197,23 @@ export function sendView(
           "ALWAYS confirm the recipient and amount on the vault screen — that display is the trusted one."),
       ),
       el("button", { class: "primary", onclick: () => stepShowPsbt(built) }, "Show QR to Vault"),
-      el("button", { class: "ghost", onclick: () => stepCompose(null) }, "← Edit"),
+      el("button", { class: "ghost", onclick: () => stepCompose(feeEstimatesCache) }, "← Edit"),
       el("button", { class: "ghost", onclick: () => app.showAccount(account) }, "Cancel"),
     );
   };
 
   // -------------------------------------------------- animated PSBT display --
   const stepShowPsbt = (built: BuiltSend) => {
+    // Encode BEFORE tearing down the review screen: if the PSBT exceeds the
+    // QR transfer cap the user must see why, not a dead button.
+    let frames: string[];
+    try {
+      frames = encodeChunks("PSBT", serializePsbt(built.psbt));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Transaction too large for QR transfer — try fewer coins");
+      return;
+    }
     destroy();
-    const frames = encodeChunks("PSBT", serializePsbt(built.psbt));
     const canvas = el("canvas", {}) as HTMLCanvasElement;
     const counter = el("div", { class: "dim small center" }, "");
 
@@ -245,6 +254,22 @@ export function sendView(
       el("button", { class: "ghost", onclick: () => app.showAccount(account) }, "Cancel"),
     );
 
+    // A rejected transfer must NOT resume scanning: the vault's animation
+    // keeps looping, so resuming would re-complete the same bad transfer and
+    // re-fire the same error forever. Stop, explain, offer a fresh start.
+    const fail = (message: string) => {
+      finished = true;
+      scanGen++;
+      scanner?.stop();
+      scanner = null;
+      clear(videoBox);
+      stats.textContent = "";
+      videoBox.append(
+        el("div", { class: "banner bad" }, message),
+        el("button", { class: "ghost", onclick: () => stepScanSigned(built) }, "Scan Again"),
+      );
+    };
+
     const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
@@ -254,24 +279,25 @@ export function sendView(
       } catch (e) {
         if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
         // Anything else from the assembler is a tampering signal: surface it.
-        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
-        assembler.reset();
-        stats.textContent = "Transfer rejected — waiting for the vault's signed-transaction QR…";
+        fail(e instanceof Error ? e.message : "Corrupted transfer");
         return;
       }
       if (assembler.isComplete()) {
         finished = true;
         try {
           const { type, payload } = assembler.assemble();
+          if (type === "PSBT") {
+            throw new Error(
+              "The vault returned a partially signed PSBT — it could not sign every input. " +
+              "This wallet only broadcasts fully signed transactions; nothing was broadcast.");
+          }
           if (type !== "TXN") throw new Error(`expected a signed transaction, got ${type}`);
           const { txidHex } = verifySignedTx(payload, built.psbt);
           scanner?.stop();
           scanner = null;
           stepBroadcast(payload, txidHex, built);
         } catch (e) {
-          toast(e instanceof Error ? e.message : "Invalid signed transaction");
-          assembler.reset();
-          finished = false;
+          fail(e instanceof Error ? e.message : "Invalid signed transaction");
         }
       }
     }).then((h) => {
@@ -338,11 +364,12 @@ export function sendView(
     );
   };
 
-  // Kick off: fetch fee estimates (best-effort), then compose.
+  // Kick off: fetch fee estimates (best-effort), then compose. The estimates
+  // are cached so "← Edit" from the review screen keeps the preset buttons.
   clear(body);
   body.append(el("div", { class: "card" }, el("p", { class: "dim" }, "Loading fee estimates…")));
   void client.getFeeEstimates()
-    .then((fees) => stepCompose(fees))
+    .then((fees) => { feeEstimatesCache = fees; stepCompose(fees); })
     .catch(() => stepCompose(null));
 
   return { node: body, destroy };

@@ -27,8 +27,8 @@ import { bytesToHex, concatBytes } from "../util/bytes.js";
 export type ChunkPayloadType = "PSBT" | "TXN" | "XPUB";
 
 const PREFIX = "SV1";
-const MAX_FRAMES = 2000;
-const MAX_FRAME_PAYLOAD = 1200; // bytes per frame before base64 (fits QR v22 @ EC-M)
+export const MAX_FRAMES = 2000;
+export const MAX_FRAME_PAYLOAD = 1200; // bytes per frame before base64 (fits QR v22 @ EC-M)
 /** Hard cap on a reassembled payload — bounds hostile-stream memory use. */
 export const MAX_TRANSFER_BYTES = 1_000_000;
 export const DEFAULT_FRAME_PAYLOAD = 300;
@@ -38,14 +38,22 @@ function groupIdFor(type: ChunkPayloadType, total: number, payload: Uint8Array):
   return bytesToHex(sha256(concatBytes(header, payload))).slice(0, 16);
 }
 
-/** Split a payload into animated-QR frame strings. */
+/**
+ * Split a payload into animated-QR frame strings. When `bytesPerFrame` is
+ * omitted, the frame size auto-scales so large payloads (bounded by
+ * MAX_TRANSFER_BYTES) always fit within MAX_FRAMES — an oversized PSBT must
+ * degrade to denser QR codes, not to an unsendable transaction.
+ */
 export function encodeChunks(
   type: ChunkPayloadType,
   payload: Uint8Array,
-  bytesPerFrame: number = DEFAULT_FRAME_PAYLOAD,
+  bytesPerFrame?: number,
 ): string[] {
   if (payload.length === 0) throw new Error("empty payload");
   if (payload.length > MAX_TRANSFER_BYTES) throw new Error("payload too large for QR transfer");
+  if (bytesPerFrame === undefined) {
+    bytesPerFrame = Math.max(DEFAULT_FRAME_PAYLOAD, Math.min(MAX_FRAME_PAYLOAD, Math.ceil(payload.length / MAX_FRAMES)));
+  }
   if (!Number.isInteger(bytesPerFrame) || bytesPerFrame < 50 || bytesPerFrame > MAX_FRAME_PAYLOAD) {
     throw new Error("bytesPerFrame out of range");
   }
