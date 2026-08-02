@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Typecheck core
+        run: npx tsc --noEmit -p packages/core
+
+      - name: Typecheck signer
+        run: npx tsc --noEmit -p apps/signer
+
+      - name: Typecheck wallet
+        run: npx tsc --noEmit -p apps/wallet
+
+      - name: Test core (BIP vectors, PSBT, entropy, vault, QR)
+        run: npm run test -w @satoshivault/core
+
+      - name: Build signer
+        run: npx vite build apps/signer
+
+      - name: Build wallet
+        run: npx vite build apps/wallet
+
+      - name: Upload bundles
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: satoshi-vault-dist
+          path: |
+            apps/signer/dist
+            apps/wallet/dist
