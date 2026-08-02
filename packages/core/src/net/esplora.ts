@@ -39,7 +39,10 @@ export interface FeeEstimates {
 export class EsploraClient {
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string, private readonly fetchImpl: typeof fetch = fetch) {
+  // The default must stay an arrow wrapper: a bare `fetch` reference is
+  // unbound, and calling it as `this.fetchImpl(...)` makes Chromium throw
+  // "Illegal invocation" (fetch invoked with `this` !== window).
+  constructor(baseUrl: string, private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init)) {
     const url = new URL(baseUrl);
     if (url.protocol !== "https:" && url.protocol !== "http:") {
       throw new Error("esplora URL must be http(s)");
