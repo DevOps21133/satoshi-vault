@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Satoshi Vault — air-gapped Bitcoin wallet</title>
+<meta name="description" content="A security-first, Bitcoin-only, air-gapped wallet system. Cold Signer + watch-only Wallet, QR-only signing channel. No telemetry, no cloud, no KYC — ever.">
+<meta name="theme-color" content="#0d0b08">
+<link rel="icon" type="image/png" href="icon-signer.png">
+<meta property="og:title" content="Satoshi Vault">
+<meta property="og:description" content="Air-gapped Bitcoin wallet: cold Signer + watch-only Wallet, connected only by QR codes. Open source, no telemetry, no cloud, no KYC.">
+<meta property="og:image" content="https://devops21133.github.io/satoshi-vault/icon-signer.png">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --ink:#0d0b08;
+    --ink-2:#141210;
+    --card:#191512;
+    --line:#2b2520;
+    --orange:#f7931a;
+    --orange-soft:#ffb64d;
+    --paper:#fffdf8;
+    --muted:#a49a90;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    font-size:17px;
+    line-height:1.65;
+    overflow-x:hidden;
+  }
+  a{color:var(--orange);text-decoration:none}
+  a:hover{text-decoration:underline}
+  img{max-width:100%;display:block}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  section{padding:88px 0}
+  .eyebrow{
+    font-size:13px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--orange);font-weight:700;margin:0 0 18px;
+  }
+  h2{
+    font-size:clamp(28px,4.2vw,40px);line-height:1.15;letter-spacing:.02em;
+    margin:0 0 20px;font-weight:700;
+  }
+  h3{font-size:19px;margin:0 0 8px;letter-spacing:.01em}
+  p{margin:0 0 18px;color:#ded5cb}
+  .lead{font-size:19px;color:#e8e0d6}
+  .muted{color:var(--muted)}
+  code,.mono{font-family:var(--mono)}
+
+  /* ---------- hero ---------- */
+  header{
+    position:relative;padding:76px 0 24px;text-align:center;overflow:hidden;
+  }
+  header::before{
+    content:"";position:absolute;left:50%;top:-180px;width:900px;height:900px;
+    transform:translateX(-50%);pointer-events:none;
+    background:radial-gradient(circle,rgba(247,147,26,.20) 0%,rgba(247,147,26,.06) 38%,transparent 68%);
+  }
+  .hero-inner{position:relative}
+  .marks{display:flex;justify-content:center;gap:26px;margin-bottom:26px}
+  .marks img{width:104px;height:104px;filter:drop-shadow(0 10px 34px rgba(247,147,26,.32))}
+  .wordmark{
+    font-size:clamp(38px,8vw,74px);line-height:1;font-weight:800;
+    letter-spacing:.14em;margin:0;
+  }
+  .wordmark .a{color:var(--orange);display:block}
+  .wordmark .b{color:var(--paper);display:block}
+  .tagline{
+    margin:22px auto 0;max-width:660px;font-size:clamp(17px,2.4vw,21px);color:#e8e0d6;
+  }
+  .subline{
+    margin:14px auto 0;max-width:640px;font-size:15px;color:var(--muted);
+    letter-spacing:.04em;
+  }
+  .badges{
+    display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:30px 0 0;
+    list-style:none;padding:0;
+  }
+  .badges li{
+    font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;
+  }
+
+  /* ---------- downloads ---------- */
+  .downloads{padding:56px 0 20px}
+  .dl-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:22px;max-width:820px;margin:0 auto;
+  }
+  .dl{
+    display:block;border-radius:20px;padding:28px 26px;text-align:center;
+    border:1px solid var(--line);background:var(--card);
+    transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+    color:var(--paper);text-decoration:none;
+  }
+  .dl:hover{
+    text-decoration:none;transform:translateY(-3px);
+    border-color:var(--orange);box-shadow:0 16px 44px rgba(247,147,26,.20);
+  }
+  .dl img{width:72px;height:72px;margin:0 auto 14px}
+  .dl .kicker{
+    font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:6px;
+  }
+  .dl .name{font-size:26px;font-weight:800;letter-spacing:.06em;margin-bottom:8px}
+  .dl .what{font-size:14.5px;color:#cfc5ba;min-height:44px;margin-bottom:20px}
+  .btn{
+    display:block;border-radius:12px;padding:15px 18px;font-weight:800;
+    font-size:15.5px;letter-spacing:.10em;text-transform:uppercase;
+  }
+  .btn-primary{background:var(--orange);color:#120e08;box-shadow:0 0 32px rgba(247,147,26,.32)}
+  .btn-ghost{background:transparent;color:var(--orange);border:2px solid var(--orange)}
+  .dl .size{margin-top:12px;font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+  .dl-note{
+    max-width:820px;margin:26px auto 0;text-align:center;font-size:14px;color:var(--muted);
+  }
+
+  /* ---------- generic blocks ---------- */
+  .rule{border:0;border-top:1px solid var(--line);margin:0}
+  .bg-2{background:var(--ink-2)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 22px;
+  }
+  .card p{font-size:15px;margin:0;color:#c8bfb5}
+  .card .ic{color:var(--orange);font-size:22px;line-height:1;margin-bottom:12px;font-weight:800}
+
+  /* ---------- flow ---------- */
+  .flow{
+    display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;
+    margin-top:34px;
+  }
+  .flow .node{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;
+  }
+  .flow .node.cold{border-color:rgba(247,147,26,.45)}
+  .flow .node h3{color:var(--orange)}
+  .flow .node p{font-size:14.5px;margin:0;color:#c8bfb5}
+  .flow .link{text-align:center;color:var(--muted);font-size:12px;letter-spacing:.18em;text-transform:uppercase}
+  .flow .link .qr{font-size:30px;color:var(--orange);display:block;line-height:1}
+
+  /* ---------- screenshots ---------- */
+  .shots{display:flex;gap:34px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  .shot{max-width:280px;text-align:center}
+  .shot img{
+    border-radius:26px;border:1px solid var(--line);
+    box-shadow:0 22px 60px rgba(0,0,0,.55);
+  }
+  .shot figcaption{font-size:13.5px;color:var(--muted);margin-top:14px;line-height:1.5}
+
+  /* ---------- how to ---------- */
+  .steps{counter-reset:step;display:grid;gap:16px;margin-top:8px}
+  .step{
+    position:relative;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:22px 24px 22px 78px;
+  }
+  .step::before{
+    counter-increment:step;content:counter(step);
+    position:absolute;left:22px;top:20px;width:40px;height:40px;border-radius:50%;
+    display:grid;place-items:center;font-family:var(--mono);font-size:18px;font-weight:700;
+    color:var(--orange);border:2px solid rgba(247,147,26,.5);background:rgba(247,147,26,.08);
+  }
+  .step h3{margin-bottom:4px}
+  .step p{margin:0;font-size:15px;color:#c8bfb5}
+
+  /* ---------- donate / footer ---------- */
+  .addr{
+    font-family:var(--mono);font-size:clamp(12px,2.4vw,15px);
+    background:#0a0806;border:1px solid var(--line);border-radius:12px;
+    padding:16px;word-break:break-all;color:var(--orange-soft);text-align:center;
+  }
+  .warn{
+    border:1px solid rgba(247,147,26,.35);background:rgba(247,147,26,.06);
+    border-radius:16px;padding:24px 26px;
+  }
+  .warn h3{color:var(--orange)}
+  .warn ul{margin:0;padding-left:20px;color:#cfc5ba;font-size:15px}
+  .warn li{margin-bottom:8px}
+  footer{
+    border-top:1px solid var(--line);padding:44px 0 60px;text-align:center;color:var(--muted);
+    font-size:14px;
+  }
+  footer .sig{font-size:17px;color:#ded5cb;letter-spacing:.04em;margin-bottom:14px}
+  footer .sig b{color:var(--orange)}
+
+  @media (max-width:820px){
+    section{padding:64px 0}
+    .dl-grid{grid-template-columns:1fr;max-width:420px}
+    .grid-2{grid-template-columns:1fr;gap:26px}
+    .cards{grid-template-columns:1fr}
+    .flow{grid-template-columns:1fr}
+    .flow .link .qr{transform:rotate(90deg)}
+    .marks img{width:82px;height:82px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap hero-inner">
+    <div class="marks">
+      <img src="icon-signer.png" alt="Satoshi Vault Signer icon">
+      <img src="icon-wallet.png" alt="Satoshi Vault Wallet icon">
+    </div>
+    <h1 class="wordmark"><span class="a">SATOSHI</span><span class="b">VAULT</span></h1>
+    <p class="tagline">A security-first, Bitcoin-only, <strong>air-gapped</strong> wallet system.</p>
+    <p class="subline">Cold Signer + watch-only Wallet · QR-only signing channel · No telemetry, no cloud, no KYC — ever.</p>
+    <ul class="badges">
+      <li>Bitcoin only</li>
+      <li>Open source · MIT</li>
+      <li>No accounts</li>
+      <li>Runs offline</li>
+    </ul>
+  </div>
+</header>
+
+<section class="downloads" id="download">
+  <div class="wrap">
+    <div class="dl-grid">
+
+      <a class="dl" href="https://github.com/DevOps21133/satoshi-vault/releases/download/apk-latest/satoshi-vault-signer.apk">
+        <img src="icon-signer.png" alt="">
+        <div class="kicker">The cold side</div>
+        <div class="name">SIGNER</div>
+        <div class="what">Holds your seed. Generates it from live sensor entropy, reviews and signs transactions. <strong>No INTERNET permission at all.</strong></div>
+        <span class="btn btn-primary">Download APK</span>
+        <div class="size">satoshi-vault-signer.apk · 3.2 MB</div>
+      </a>
+
+      <a class="dl" href="https://github.com/DevOps21133/satoshi-vault/releases/download/apk-latest/satoshi-vault-wallet.apk">
+        <img src="icon-wallet.png" alt="">
+        <div class="kicker">The online side</div>
+        <div class="name">WALLET</div>
+        <div class="what">Public keys only. Watches balances, builds transactions, broadcasts what the Signer approved. Never sees a private key.</div>
+        <span class="btn btn-ghost">Download APK</span>
+        <div class="size">satoshi-vault-wallet.apk · 3.2 MB</div>
+      </a>
+
+    </div>
+    <p class="dl-note">
+      Android · install both, ideally on two devices — the Signer on one that never goes online again.
+      Verify against <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/apk/SHA256SUMS.txt">SHA256SUMS.txt</a>,
+      or build them yourself from <a href="https://github.com/DevOps21133/satoshi-vault">the source</a>.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="bg-2" id="mission">
+  <div class="wrap">
+    <p class="eyebrow">Mission</p>
+    <h2>Protect people worldwide from getting their Bitcoin wallet hacked.</h2>
+    <p class="lead">
+      Almost every wallet theft traces back to two root causes: a <strong>seed born from weak or
+      predictable randomness</strong>, and <strong>private keys living on an internet-connected
+      device</strong>. Satoshi Vault attacks both.
+    </p>
+    <p>
+      The seed is created in an <strong>entropy ceremony</strong> that mixes many independent
+      physical sources — camera noise, microphone noise, pointer motion, device motion — always
+      combined with the operating system's CSPRNG, each source health-tested to NIST SP 800-90B.
+      A dead or hostile sensor can add nothing, but it can never subtract: the result is never
+      weaker than the OS randomness alone.
+    </p>
+    <p>
+      The keys then live only on a device that is <em>physically incapable</em> of network I/O.
+      Everyone deserves a wallet whose seed no attacker can predict and whose keys no attacker
+      can reach — and the only way to believe that is to be able to read it. So every line is
+      open source, written from scratch, with no code copied from any other wallet project.
+    </p>
+
+    <div class="flow">
+      <div class="node cold">
+        <h3>SIGNER — offline forever</h3>
+        <p>Seed generation, encrypted vault, PSBT review on its own trusted screen, signing. No network permission, CSP <code>connect-src 'none'</code>.</p>
+      </div>
+      <div class="link"><span class="qr">⇄</span>QR codes only</div>
+      <div class="node">
+        <h3>WALLET — online</h3>
+        <p>Watch-only from your xpub. Balances, coin control, fee estimates, RBF, broadcast. Assumed compromisable, and treated that way.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="screenshots">
+  <div class="wrap">
+    <p class="eyebrow">Screenshots</p>
+    <h2>The watch-only Wallet, on Android.</h2>
+    <div class="shots">
+      <figure class="shot">
+        <img src="screenshots/wallet-home.jpg" alt="Satoshi Vault Wallet account overview">
+        <figcaption>Balance, coin count and a fresh receive address — from public keys only.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/wallet-receive.jpg" alt="Satoshi Vault Wallet receive card showing fingerprint and derivation path">
+        <figcaption>The receive card prints the master fingerprint and derivation path, so you can check the address against the Signer instead of trusting the online device.</figcaption>
+      </figure>
+    </div>
+    <p class="dl-note">
+      There are no Signer screenshots — there can't be. The Signer sets <code>FLAG_SECURE</code>,
+      so Android itself blocks screenshots, screen recorders and even the thumbnail in the
+      recents list. Your seed words cannot leak into a screenshot gallery.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="bg-2" id="howto">
+  <div class="wrap">
+    <p class="eyebrow">How to</p>
+    <h2>Five steps, once. Then it's just a wallet.</h2>
+    <div class="steps">
+      <div class="step">
+        <h3>Split the two apps across two devices</h3>
+        <p>Install the <strong>Signer</strong> on a device that will never touch a network again — an old phone is perfect. Turn on airplane mode, remove the SIM, forget the Wi-Fi. Install the <strong>Wallet</strong> on your normal phone.</p>
+      </div>
+      <div class="step">
+        <h3>Create the vault on the Signer</h3>
+        <p><em>Create New Vault</em> → <em>Begin Entropy Ceremony</em>: point the camera around, let the mic listen, move your finger across the screen until <em>Entropy Collected</em> reaches the target. <em>Generate Seed</em> gives you your words — <strong>write them on paper</strong>, never a photo, never a file. A short quiz after <em>I Wrote Them Down</em> proves you copied them correctly, and a strong password seals the vault.</p>
+      </div>
+      <div class="step">
+        <h3>Show the Wallet your public keys</h3>
+        <p>On the Signer: <em>Export Watch-Only Account</em> → an animated QR appears. In the Wallet: <em>Add Account</em> → scan it. That QR carries only the <strong>xpub</strong> — public keys. The Wallet can now see every address and balance you own, and still cannot spend a single satoshi.</p>
+      </div>
+      <div class="step">
+        <h3>Receive</h3>
+        <p>Wallet → <em>Receive</em> gives you a fresh address and QR for each payment. Before a large amount, check the master fingerprint and derivation path shown there against the ones on the Signer.</p>
+      </div>
+      <div class="step">
+        <h3>Send</h3>
+        <p>The Wallet builds an unsigned transaction and shows it as a QR. The Signer scans it and displays the real recipient, amount and fee <strong>on its own trusted screen</strong> — approve there, and it hands back a signed QR. The Wallet checks it byte-for-byte against what you reviewed, then broadcasts. Your seed never crosses the gap.</p>
+      </div>
+    </div>
+    <p class="dl-note">
+      Prefer to try it first? Switch the network to <strong>signet</strong> or <strong>testnet</strong>
+      in the Wallet's settings and run the whole loop with worthless coins.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section id="security">
+  <div class="wrap">
+    <p class="eyebrow">How it defends you</p>
+    <h2>The online device is treated as the attacker.</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="ic">⌁</div>
+        <h3>Multi-source entropy</h3>
+        <p>Camera, microphone, pointer and motion noise absorbed into a SHA-256 sponge with 32 bytes of OS CSPRNG. Per-source health tests reject stuck counters and dead sensors outright.</p>
+      </div>
+      <div class="card">
+        <div class="ic">⛨</div>
+        <h3>Amounts can't be forged</h3>
+        <p>Every input carries the full previous transaction, re-hashed locally against its txid. A lying server or a tampered QR cannot misstate what you are spending.</p>
+      </div>
+      <div class="card">
+        <div class="ic">↺</div>
+        <h3>Verified change</h3>
+        <p>The Signer never trusts a "this is change" claim — it re-derives the path from its own master key and byte-compares the script. Fake change is shown as an attack.</p>
+      </div>
+      <div class="card">
+        <div class="ic">₿</div>
+        <h3>Fee-drain alarm</h3>
+        <p>An abnormal fee — by absolute size, by sat/vB, or as a share of the coins being spent — is flagged in red and cannot be signed on the first press.</p>
+      </div>
+      <div class="card">
+        <div class="ic">✳</div>
+        <h3>Vault at rest</h3>
+        <p>Argon2id (64 MiB, t=3) → AES-256-GCM with the header authenticated as AAD. The optional BIP39 passphrase is never stored, in any form.</p>
+      </div>
+      <div class="card">
+        <div class="ic">⚙</div>
+        <h3>No invented crypto</h3>
+        <p>Every primitive comes from audited libraries (<code>@noble/curves</code>, <code>@noble/hashes</code>, <code>@scure/base</code>). This codebase only composes them — and documents each composition.</p>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:44px">
+      <div>
+        <h3>Standards, not improvisation</h3>
+        <p class="muted" style="font-size:15px">
+          BIP39 mnemonics (12–24 words, optional passphrase) · BIP32/43/44/49/84/86 derivation ·
+          P2PKH, P2SH-P2WPKH, P2WPKH and Taproot P2TR · PSBT (BIP174/BIP371) as the interchange
+          format · coin control, RBF by default, live fee estimates · Esplora backends including
+          your own node · mainnet, testnet, signet, regtest. Verified against the official BIP
+          test vectors in CI.
+        </p>
+      </div>
+      <div class="warn">
+        <h3>Read this before you use it</h3>
+        <ul>
+          <li>This software has <strong>not yet had a third-party security audit</strong>. Start on signet or testnet, then small amounts.</li>
+          <li>The published APKs are <strong>debug-signed test builds</strong>. Android will not upgrade one over another — uninstall the old build first.</li>
+          <li>Write your seed words on paper. Software is not a backup.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="bg-2" id="donate">
+  <div class="wrap" style="max-width:760px;text-align:center">
+    <p class="eyebrow">Donate ₿</p>
+    <h2>Free, open, and it will never monetize you.</h2>
+    <p>
+      No telemetry, no accounts, no paid tiers, no upsells. If Satoshi Vault helps keep your
+      bitcoin safe and you want to support development, donations are gratefully accepted:
+    </p>
+    <div class="addr">bc1quh3humfcqfh7gh3v8d784e29av24y0vl540qcf</div>
+    <p class="muted" style="font-size:14px;margin-top:14px">
+      Bitcoin mainnet, native SegWit. The same address is pinned to the bottom of every screen
+      of both apps, with a copy button.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="sig"><i>Not your keys, not your coins.</i> <b>₿</b></p>
+    <p>
+      <a href="https://github.com/DevOps21133/satoshi-vault">Source on GitHub</a> ·
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/THREAT_MODEL.md">Threat model</a> ·
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/CRYPTOGRAPHY.md">Cryptography</a> ·
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/docs/ARCHITECTURE.md">Architecture</a> ·
+      <a href="https://github.com/DevOps21133/satoshi-vault/blob/main/SECURITY.md">Report a vulnerability</a>
+    </p>
+    <p class="muted">MIT licensed · built from scratch · no code copied from any wallet project</p>
+  </div>
+</footer>
+
+</body>
+</html>
