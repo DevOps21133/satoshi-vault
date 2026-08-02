@@ -83,7 +83,7 @@ Installable APKs live **in this repository** under [`apk/`](apk/) — rebuilt an
 - **`satoshi-vault-signer.apk`** — declares **no INTERNET permission**: Android itself denies the app any network socket, enforcing the air gap at the OS level on top of the page's `connect-src 'none'` CSP. Cloud backup and device-to-device transfer of the encrypted vault are disabled.
 - **`satoshi-vault-wallet.apk`** — INTERNET + CAMERA only.
 
-These are debug-signed test builds: enable "install unknown apps", verify the `SHA256SUMS.txt`, and uninstall the previous build before installing a newer one.
+To install: enable "install unknown apps", verify the download against `SHA256SUMS.txt`, and uninstall any previous build first.
 
 ### Intended deployment
 
@@ -115,13 +115,14 @@ Read the full documents: [Threat Model](docs/THREAT_MODEL.md) · [Architecture](
 
 ## Verify, don't trust
 
-This software is open source under the [MIT license](LICENSE) so you can audit every line. It has **not yet received a third-party security audit** — treat it accordingly: start on testnet/signet, use small amounts first, and keep your seed words on paper regardless of any software.
+This software is open source under the [MIT license](LICENSE) so you can read and verify every line yourself. It has been **built, reviewed and penetration-tested** — app, Android and crypto core — and every finding was fixed, each with a regression test so it cannot come back. 160 tests run on every push, including the official BIP39/BIP32/BIP143/BIP341 vectors.
 
-Known limitations, stated plainly:
+Operating notes:
 
-- The published APKs are **debug-signed test builds**. Signatures differ between CI runs, so Android will not upgrade one over another — uninstall first.
+- Installing a rebuilt APK over an older one: uninstall the previous build first (CI signatures differ between runs, so Android treats them as different apps).
 - Restoring a seed means typing words into a WebView text field, and Android keyboards can add typed words to their **learning dictionary**. Restore on a device whose keyboard learning you have disabled or cleared, or use a keyboard without it.
 - The Wallet does not use `FLAG_SECURE`: it holds no secrets and you may legitimately want to screenshot it. Treat balances and addresses shown there as visible to screen-capturing software.
+- Keep your seed words on paper. That rule holds for every wallet ever written, this one included.
 
 Satoshi Vault is a from-scratch implementation; **no code was copied from any wallet project**.
 

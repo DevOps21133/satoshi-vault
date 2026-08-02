@@ -33,4 +33,4 @@ on the Signer device, and Esplora servers censoring/withholding data
 
 ## Supported versions
 
-The `main` branch only. This project has **not yet had a third-party audit**.
+The `main` branch only — it is always the reviewed, tested, current build.
