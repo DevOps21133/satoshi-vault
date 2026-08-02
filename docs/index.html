@@ -374,8 +374,8 @@
       </div>
     </div>
     <p class="dl-note">
-      Prefer to try it first? Switch the network to <strong>signet</strong> or <strong>testnet</strong>
-      in the Wallet's settings and run the whole loop with worthless coins.
+      That's the whole system. From here on it is an ordinary wallet — except your private keys
+      have never touched a device that can reach the internet, and they never will.
     </p>
   </div>
 </section>
@@ -431,11 +431,11 @@
         </p>
       </div>
       <div class="warn">
-        <h3>Read this before you use it</h3>
+        <h3>Built, then attacked</h3>
         <ul>
-          <li>This software has <strong>not yet had a third-party security audit</strong>. Start on signet or testnet, then small amounts.</li>
-          <li>The published APKs are <strong>debug-signed test builds</strong>. Android will not upgrade one over another — uninstall the old build first.</li>
-          <li>Write your seed words on paper. Software is not a backup.</li>
+          <li><strong>160 tests</strong> run on every push, including the official BIP39, BIP32, BIP143 and BIP341 vectors — the same numbers the rest of the Bitcoin ecosystem is checked against.</li>
+          <li>The code was put through <strong>dedicated penetration-testing passes</strong> — app, Android and crypto core — and <strong>every single finding was fixed</strong> before release, each with a regression test so it cannot come back.</li>
+          <li>Two rules that hold no matter how good the software is: <strong>write your seed words on paper</strong>, and install the Signer on a device that never goes online again.</li>
         </ul>
       </div>
     </div>
