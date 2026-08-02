@@ -5,7 +5,7 @@
  */
 
 import { clear, el, toast } from "@satoshivault/ui";
-import { encryptVault, entropyToMnemonic, EntropyProgress, zeroize } from "@satoshivault/core";
+import { encryptVault, entropyToMnemonic, EntropyProgress, EntropySource, zeroize } from "@satoshivault/core";
 import { AppCtx, View } from "../types";
 import { Ceremony } from "../ceremony";
 import { encodeVaultPayload } from "../session";
@@ -76,6 +76,22 @@ export function createView(app: AppCtx): View {
     const stats = el("div", { class: "dim small center" }, "0 / 0 bits");
     const micFill = el("div", { class: "fill" });
     const micMeter = el("div", { class: "meter" }, micFill);
+    // Live per-sensor readout: the user must be able to SEE that every
+    // entropy vector is contributing, not just the camera preview.
+    const SENSORS: { key: EntropySource; label: string }[] = [
+      { key: "camera", label: "Camera" },
+      { key: "microphone", label: "Microphone" },
+      { key: "touch", label: "Touch / Pointer" },
+      { key: "accelerometer", label: "Device Motion" },
+    ];
+    const sensorCells = new Map<EntropySource, HTMLElement>();
+    const sensorList = el("div", {},
+      ...SENSORS.map(({ key, label }) => {
+        const cell = el("span", { class: "v" }, "waiting…");
+        sensorCells.set(key, cell);
+        return el("div", { class: "kv" }, el("span", { class: "k" }, label), cell);
+      }),
+    );
     const warnings = el("div", {});
     const generateBtn = el("button", { class: "primary", disabled: true }, "Collecting Entropy…") as HTMLButtonElement;
     const seenErrors = new Set<string>();
@@ -91,6 +107,7 @@ export function createView(app: AppCtx): View {
         el("div", { class: "stack" },
           el("label", { class: "field" }, el("span", { class: "cap" }, "Entropy Collected"), meter, stats),
           el("label", { class: "field" }, el("span", { class: "cap" }, "Microphone Level"), micMeter),
+          el("label", { class: "field" }, el("span", { class: "cap" }, "Entropy Vectors"), sensorList),
         ),
         warnings,
       ),
@@ -102,6 +119,15 @@ export function createView(app: AppCtx): View {
       fill.style.width = `${Math.round(p.ratio * 100)}%`;
       stats.textContent = `${p.creditedBits} / ${p.targetBits} bits` +
         (p.failedSources.length ? ` — unhealthy: ${p.failedSources.join(", ")}` : "");
+      for (const { key } of SENSORS) {
+        const cell = sensorCells.get(key)!;
+        const entry = p.bySource.find((b) => b.source === key);
+        if (entry?.failed || p.failedSources.includes(key)) {
+          cell.textContent = "✗ unhealthy — not counted";
+        } else if (entry) {
+          cell.textContent = `✓ ${entry.bits} bits`;
+        }
+      }
       if (p.ratio >= 1 && generateBtn.disabled) {
         generateBtn.disabled = false;
         generateBtn.textContent = "Generate Seed";

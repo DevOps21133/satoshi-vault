@@ -1,15 +1,14 @@
 /**
  * Multi-source entropy pool for seed generation.
  *
- * Architecture (studied from AirGap Vault, redesigned — not copied):
- * a running SHA-256 chain absorbs samples from physical sensors (camera
+ * Architecture: a running SHA-256 chain absorbs samples from physical sensors (camera
  * frames, microphone buffers, touch/pointer events, accelerometer) and the
  * platform CSPRNG. The pool is bookended: a large CSPRNG block is absorbed at
  * initialization AND at extraction, so the final seed is AT LEAST as strong
  * as the OS CSPRNG alone even if every sensor source is broken or hostile.
  * Sensor entropy can only add security, never reduce it.
  *
- * Improvements over the reference design:
+ * Design properties:
  * - Domain separation: every absorbed sample is framed with a source tag and
  *   length, so sources cannot impersonate each other and concatenation
  *   ambiguity is impossible.
@@ -102,6 +101,11 @@ export interface EntropyProgress {
   targetBits: number;
   /** Sources currently marked unhealthy by the 800-90B tests. */
   failedSources: EntropySource[];
+  /**
+   * Per-source credit for every sensor source that has delivered at least one
+   * sample. A failed source reports bits: 0 (its credit is revoked).
+   */
+  bySource: { source: EntropySource; bits: number; failed: boolean }[];
 }
 
 export class EntropyPool {
@@ -165,11 +169,19 @@ export class EntropyPool {
   progress(): EntropyProgress {
     const failedSources = [...this.health.entries()].filter(([, h]) => h.failed).map(([s]) => s);
     const credited = this.creditedBits();
+    // Union of both maps: a source that fails health tests on its very first
+    // sample never earns credit but must still be listed (bits 0, failed).
+    const seen = new Set<EntropySource>([...this.creditBySource.keys(), ...this.health.keys()]);
+    const bySource = [...seen].map((source) => {
+      const failed = this.health.get(source)?.failed ?? false;
+      return { source, bits: failed ? 0 : this.creditBySource.get(source) ?? 0, failed };
+    });
     return {
       ratio: Math.min(1, credited / this.targetBits),
       creditedBits: credited,
       targetBits: this.targetBits,
       failedSources,
+      bySource,
     };
   }
 

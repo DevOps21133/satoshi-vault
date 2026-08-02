@@ -97,7 +97,7 @@ Read the full documents: [Threat Model](docs/THREAT_MODEL.md) · [Architecture](
 
 This software is open source under the [MIT license](LICENSE) so you can audit every line. It has **not yet received a third-party security audit** — treat it accordingly: start on testnet/signet, use small amounts first, and keep your seed words on paper regardless of any software.
 
-Satoshi Vault is a from-scratch implementation. The entropy-ceremony and air-gap concepts are inspired by the architecture of [AirGap](https://github.com/airgap-it) (vault/wallet split); **no code was copied from any wallet project**.
+Satoshi Vault is a from-scratch implementation; **no code was copied from any wallet project**.
 
 ## Reporting a vulnerability
 

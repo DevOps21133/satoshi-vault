@@ -77,6 +77,18 @@ describe("entropy pool", () => {
     expect(pool.progress().failedSources).toContain("accelerometer");
   });
 
+  it("progress reports per-source credit, zeroed for failed sources", () => {
+    const pool = new EntropyPool(128);
+    pool.addSample("camera", randomBytes(1024));
+    pool.addSample("microphone", randomBytes(256));
+    pool.addSample("touch", new Uint8Array(10_000).fill(1)); // fails health tests
+    const by = new Map(pool.progress().bySource.map((s) => [s.source, s]));
+    expect(by.get("camera")).toEqual({ source: "camera", bits: 64, failed: false });
+    expect(by.get("microphone")).toEqual({ source: "microphone", bits: 32, failed: false });
+    expect(by.get("touch")).toEqual({ source: "touch", bits: 0, failed: true });
+    expect(by.has("accelerometer")).toBe(false); // never sampled → not listed
+  });
+
   it("failed source cannot satisfy the target but healthy sources still can", () => {
     const pool = new EntropyPool(128);
     pool.addSample("touch", new Uint8Array(10_000).fill(1));
