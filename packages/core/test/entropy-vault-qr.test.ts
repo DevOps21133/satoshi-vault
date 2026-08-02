@@ -37,9 +37,27 @@ describe("entropy pool", () => {
 
   it("refuses double extraction", () => {
     const pool = new EntropyPool(128);
-    pool.addSample("camera", randomBytes(4096));
+    while (pool.progress().ratio < 1) pool.addSample("camera", randomBytes(4096));
     pool.extract(16);
     expect(() => pool.extract(16)).toThrow(/already extracted/);
+  });
+
+  it("a single large sample cannot satisfy the target (per-sample credit cap)", () => {
+    const pool = new EntropyPool(128);
+    pool.addSample("camera", randomBytes(65_536));
+    expect(pool.progress().creditedBits).toBeLessThanOrEqual(64);
+    expect(() => pool.extract(16)).toThrow(/not enough/);
+  });
+
+  it("credit is revoked when a source fails its health tests later", () => {
+    const pool = new EntropyPool(128);
+    pool.addSample("camera", randomBytes(1024));
+    const before = pool.progress().creditedBits;
+    expect(before).toBeGreaterThan(0);
+    pool.addSample("camera", new Uint8Array(64).fill(0x55)); // camera gets stuck
+    const progress = pool.progress();
+    expect(progress.failedSources).toContain("camera");
+    expect(progress.creditedBits).toBe(0);
   });
 
   it("health test disqualifies a stuck source (repetition count test)", () => {
@@ -63,8 +81,9 @@ describe("entropy pool", () => {
     const pool = new EntropyPool(128);
     pool.addSample("touch", new Uint8Array(10_000).fill(1));
     expect(pool.progress().ratio).toBe(0);
-    pool.addSample("camera", randomBytes(4096));
-    expect(pool.progress().ratio).toBe(1);
+    while (pool.progress().ratio < 1) pool.addSample("camera", randomBytes(4096));
+    expect(pool.progress().failedSources).toContain("touch");
+    expect(() => pool.extract(16)).not.toThrow();
   });
 });
 
@@ -146,9 +165,22 @@ describe("QR chunk framing", () => {
 
   it("rejects garbage and oversized frames", () => {
     expect(() => parseFrame("hello world")).toThrow();
-    expect(() => parseFrame("SV1:EVIL:1/1:aabbccdd:QUJD")).toThrow();
-    expect(() => parseFrame("SV1:PSBT:2/1:aabbccdd:QUJD")).toThrow(/index/);
+    expect(() => parseFrame("SV1:EVIL:1/1:aabbccddaabbccdd:QUJD")).toThrow();
+    expect(() => parseFrame("SV1:PSBT:2/1:aabbccddaabbccdd:QUJD")).toThrow(/index/);
+    expect(() => parseFrame("SV1:PSBT:1/1:aabbccdd:QUJD")).toThrow(); // 32-bit groupId retired
     expect(() => parseFrame("x".repeat(5000))).toThrow(/too long/);
+  });
+
+  it("groupId commits to the frame type, not just the payload", () => {
+    const payload = randomBytes(100);
+    const asPsbt = parseFrame(encodeChunks("PSBT", payload)[0]!);
+    const asTxn = parseFrame(encodeChunks("TXN", payload)[0]!);
+    expect(asPsbt.groupId).not.toBe(asTxn.groupId);
+    // Re-labelling a frame's type without recomputing the id must not assemble.
+    const relabelled = encodeChunks("PSBT", payload)[0]!.replace(":PSBT:", ":TXN:");
+    const asm = new ChunkAssembler();
+    asm.add(relabelled);
+    expect(() => asm.assemble()).toThrow(/hash mismatch/);
   });
 
   it("payload tampering is detected at assembly", () => {

@@ -39,9 +39,18 @@ export function outputVsize(scriptPubKeyLength: number): number {
 /** Tx overhead: version(4) + locktime(4) + in/out counts (~2) + segwit marker/flag (0.5). */
 const TX_OVERHEAD_VSIZE = 10.5;
 
-/** Dust thresholds (Bitcoin Core defaults at 3 sat/vB relay). */
+/** Dust thresholds per output type (Bitcoin Core defaults at 3 sat/vB relay). */
 export function dustThreshold(spendType: SpendType): bigint {
-  return spendType === "p2pkh" ? 546n : 330n;
+  switch (spendType) {
+    case "p2pkh":
+      return 546n;
+    case "p2sh-p2wpkh":
+      return 540n;
+    case "p2wpkh":
+      return 294n;
+    case "p2tr":
+      return 330n;
+  }
 }
 
 export function estimateVsize(

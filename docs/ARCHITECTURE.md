@@ -63,11 +63,16 @@ SV1:<TYPE>:<index>/<total>:<groupId>:<base64url-payload>
 
 - `TYPE` ∈ `XPUB` (account export), `PSBT` (unsigned/partially-signed), `TXN`
   (fully-signed raw transaction).
-- `groupId` = first 8 hex chars of SHA-256(full payload) — frames from
-  different payloads can never be mixed, and reassembly is integrity-checked
-  against the full hash.
+- `groupId` = first 16 hex chars (64 bits) of
+  SHA-256(`"SV1:<TYPE>:<total>:"` ‖ payload) — the id commits to the payload
+  AND the frame type/count, so frames can neither be mixed across transfers
+  nor re-labelled/re-split, and reassembly is integrity-checked against the
+  recomputed hash.
 - The receiver (`ChunkAssembler`) accepts frames in any order, tolerates
-  repeats, and rejects any frame whose declared total/group conflicts.
+  repeats, caps the total transfer at 1 MB, and rejects any frame whose
+  declared total/group conflicts. Unparseable frames raise `FrameParseError`
+  (ignorable camera noise); every other assembler error is a tampering signal
+  the UI surfaces.
 
 Both directions are **untrusted**:
 

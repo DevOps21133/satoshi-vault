@@ -465,6 +465,7 @@ export function validateSigningPath(path: number[], spendType: SpendType, networ
   if (account - HARDENED_OFFSET > 100_000) throw new Error("implausible account index");
   if (change !== 0 && change !== 1) throw new Error("change level must be 0 or 1");
   if (index >= HARDENED_OFFSET) throw new Error("address index must be non-hardened");
+  if (index > 100_000) throw new Error("implausible address index");
 }
 
 function deriveByIndices(master: HDPrivateKey, path: number[]): HDPrivateKey {
@@ -497,6 +498,17 @@ export function signPsbt(psbt: Psbt, master: HDPrivateKey, network: Network): Si
     const map = psbt.inputMaps[i]!;
     const { spendType, prevout } = classifyInput(psbt, i);
 
+    // Neither the legacy nor the BIP143 sighash lets the network reject a
+    // lied-about amount for OTHER inputs, and BIP143 commits only to the
+    // amount the wallet CLAIMS for this input. A bare witness_utxo is
+    // therefore attacker-controlled data. Require the full previous
+    // transaction (hash-bound to prevTxid in resolvePrevout) for every
+    // non-taproot input. Taproot is exempt: BIP341 commits to every prevout
+    // amount and script, so a lie produces an invalid transaction.
+    if (spendType !== "p2tr" && !findOne(map, typeKey(PSBT_IN_NON_WITNESS_UTXO))) {
+      throw new Error(`input ${i}: ${spendType} input requires non_witness_utxo (amount forgery defense)`);
+    }
+
     const declaredSighash = findOne(map, typeKey(PSBT_IN_SIGHASH_TYPE));
     if (declaredSighash) {
       if (declaredSighash.length !== 4) throw new Error("malformed sighash type");
@@ -508,25 +520,31 @@ export function signPsbt(psbt: Psbt, master: HDPrivateKey, network: Network): Si
     const derivations = spendType === "p2tr" ? getTapBip32Derivations(map) : getBip32Derivations(map);
     const ours = derivations.filter((d) => d.masterFingerprint === masterFingerprint);
     if (ours.length === 0) continue;
-    if (ours.length > 1) throw new Error(`input ${i}: multiple derivations for our fingerprint`);
-    const derivation = ours[0]!;
 
-    validateSigningPath(derivation.path, spendType, network);
-    const child = deriveByIndices(master, derivation.path);
-    try {
-      const pubkey = child.publicKey;
-      const expectedPubkey = spendType === "p2tr" ? xOnly(pubkey) : pubkey;
-      if (!bytesEqual(expectedPubkey, derivation.pubkey)) {
-        throw new Error(`input ${i}: derived key does not match PSBT derivation entry`);
+    // Master fingerprints are only 32 bits, so another wallet's entry can
+    // collide with ours. Every candidate path must satisfy the wallet policy
+    // (steering attempts fail loudly), but an entry whose key we cannot
+    // reproduce is treated as someone else's, not as fatal — otherwise a
+    // hostile PSBT could block signing entirely with a forged entry.
+    let child: HDPrivateKey | undefined;
+    let pubkey: Uint8Array | undefined;
+    for (const derivation of ours) {
+      validateSigningPath(derivation.path, spendType, network);
+      const candidate = deriveByIndices(master, derivation.path);
+      const candidatePubkey = candidate.publicKey;
+      const expectedPubkey = spendType === "p2tr" ? xOnly(candidatePubkey) : candidatePubkey;
+      if (bytesEqual(expectedPubkey, derivation.pubkey)) {
+        child = candidate;
+        pubkey = candidatePubkey;
+        break;
       }
+      candidate.wipe();
+    }
+    if (!child || !pubkey) continue;
 
+    try {
       switch (spendType) {
         case "p2pkh": {
-          // Legacy sighash does not commit to amounts — require the full
-          // previous transaction (validated against prevTxid in resolvePrevout).
-          if (!findOne(map, typeKey(PSBT_IN_NON_WITNESS_UTXO))) {
-            throw new Error(`input ${i}: legacy input requires non_witness_utxo`);
-          }
           const expected = p2pkhScriptCode(hash160(pubkey));
           if (!bytesEqual(prevout.scriptPubKey, expected)) {
             throw new Error(`input ${i}: prevout script does not match the signing key`);
@@ -630,7 +648,9 @@ export function finalizePsbt(psbt: Psbt): void {
   for (let i = 0; i < psbt.tx.inputs.length; i++) {
     const map = psbt.inputMaps[i]!;
     if (findOne(map, typeKey(PSBT_IN_FINAL_SCRIPTSIG)) || findOne(map, typeKey(PSBT_IN_FINAL_SCRIPTWITNESS))) {
-      continue;
+      // A pre-finalized input would bypass every verification below —
+      // refuse rather than emit scripts this finalizer has not checked.
+      throw new Error(`input ${i} is already finalized — refusing to pass through unverified scripts`);
     }
     const { spendType, prevout, redeemScript } = classifyInput(psbt, i);
 
@@ -658,6 +678,19 @@ export function finalizePsbt(psbt: Psbt): void {
       if (pubkey.length !== 33) throw new Error("partial signature pubkey must be 33 bytes");
       const sig = partials[0]!.value;
       const pkh = hash160(pubkey);
+
+      // The signature must come from the key the prevout actually pays —
+      // otherwise a stray partial_sig would finalize into an unspendable
+      // (or wrong-key) script.
+      const expectedPkh =
+        spendType === "p2pkh"
+          ? prevout.scriptPubKey.slice(3, 23)
+          : spendType === "p2wpkh"
+            ? prevout.scriptPubKey.slice(2, 22)
+            : redeemScript!.slice(2, 22);
+      if (!bytesEqual(pkh, expectedPkh)) {
+        throw new Error(`input ${i}: partial signature pubkey does not match the prevout`);
+      }
 
       if (spendType === "p2pkh") {
         assertValidEcdsaSignature(sig, pubkey, legacySighash(psbt.tx, i, prevout.scriptPubKey, SIGHASH_ALL));

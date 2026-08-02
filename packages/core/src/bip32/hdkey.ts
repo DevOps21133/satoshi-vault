@@ -258,8 +258,15 @@ export function parseExtendedKey(encoded: string): ParsedExtendedKey {
   if (!isPrivate && !isPublic) throw new Error("unknown extended key version");
 
   if (isPrivate) {
-    if (keyData[0] !== 0) throw new Error("invalid private key prefix");
-    return { version, key: new HDPrivateKey(keyData.slice(1), chainCode, meta), isPrivate: true };
+    if (keyData[0] !== 0) {
+      zeroize(payload, keyData, chainCode);
+      throw new Error("invalid private key prefix");
+    }
+    const key = new HDPrivateKey(keyData.slice(1), chainCode, meta);
+    // The decoded payload and its keyData slice hold the raw private key —
+    // wipe them; the HDPrivateKey owns its own copies now.
+    zeroize(payload, keyData);
+    return { version, key, isPrivate: true };
   }
   return { version, key: new HDPublicKey(keyData, chainCode, meta), isPrivate: false };
 }

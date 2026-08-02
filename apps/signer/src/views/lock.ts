@@ -42,7 +42,7 @@ function welcome(app: AppCtx): View {
 }
 
 function unlockForm(app: AppCtx): View {
-  const password = el("input", { type: "password", autocomplete: "current-password", placeholder: "Vault password" });
+  const password = el("input", { type: "password", autocomplete: "off", placeholder: "Vault password" });
   const passphrase = el("input", { type: "password", autocomplete: "off", placeholder: "BIP39 passphrase" });
   const showPassphrase = usesPassphrase();
   const unlockBtn = el("button", { class: "primary" }, "Unlock Vault") as HTMLButtonElement;

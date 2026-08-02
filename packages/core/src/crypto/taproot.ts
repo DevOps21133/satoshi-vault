@@ -59,8 +59,10 @@ export function taprootOutputKey(internalXOnly: Uint8Array, merkleRoot?: Uint8Ar
  */
 export function taprootTweakPrivateKey(privateKey: Uint8Array, merkleRoot?: Uint8Array): Uint8Array {
   if (privateKey.length !== 32) throw new Error("private key must be 32 bytes");
-  let d = bytesToBigInt(privateKey) % CURVE_N;
-  if (d === 0n) throw new Error("invalid private key");
+  let d = bytesToBigInt(privateKey);
+  // Reject out-of-range keys instead of silently reducing mod n — a reduced
+  // key would sign for a DIFFERENT key than the caller derived.
+  if (d === 0n || d >= CURVE_N) throw new Error("invalid private key");
   const P = Point.BASE.multiply(d);
   // schnorr/x-only convention: use the key whose point has even Y.
   const affine = P.toAffine();

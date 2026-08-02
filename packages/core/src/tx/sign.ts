@@ -11,7 +11,7 @@
 import { secp256k1, schnorr } from "@noble/curves/secp256k1";
 import { hash160 } from "../crypto/hash.js";
 import { taprootTweakPrivateKey } from "../crypto/taproot.js";
-import { concatBytes, zeroize } from "../util/bytes.js";
+import { bytesEqual, concatBytes, zeroize } from "../util/bytes.js";
 import { ByteWriter } from "../util/writer.js";
 import { Transaction, TxOutput } from "./tx.js";
 import {
@@ -107,6 +107,12 @@ export function signInput(
     }
     case "p2tr": {
       if (!allPrevouts) throw new Error("taproot signing requires all prevouts");
+      // The sighash commits to allPrevouts[index]; it must be the same UTXO
+      // the caller validated as info.prevout, or the checks above are moot.
+      const own = allPrevouts[index];
+      if (!own || own.value !== info.prevout.value || !bytesEqual(own.scriptPubKey, info.prevout.scriptPubKey)) {
+        throw new Error("allPrevouts[index] disagrees with info.prevout");
+      }
       const tweaked = taprootTweakPrivateKey(privateKey);
       try {
         const outputKey = schnorr.getPublicKey(tweaked);

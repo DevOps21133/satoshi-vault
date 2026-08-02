@@ -48,11 +48,22 @@ export function txidToHex(internal: Uint8Array): string {
   return bytesToHex(reversed(internal));
 }
 
+/**
+ * Standardness check for outputs WE create (and witness_utxo claims).
+ * Deliberately NOT applied when parsing/serializing foreign transactions:
+ * a previous transaction fetched for non_witness_utxo may contain
+ * consensus-valid but nonstandard sibling outputs (e.g. empty or oversized
+ * scripts), and refusing to parse it would make our own UTXO unspendable.
+ */
 export function assertSaneOutput(out: TxOutput): void {
-  if (out.value < 0n || out.value > MAX_MONEY) throw new Error("output value out of range");
+  assertSaneValue(out.value);
   if (out.scriptPubKey.length === 0 || out.scriptPubKey.length > 10_000) {
     throw new Error("invalid scriptPubKey length");
   }
+}
+
+function assertSaneValue(value: bigint): void {
+  if (value < 0n || value > MAX_MONEY) throw new Error("output value out of range");
 }
 
 function serializeInputsOutputs(w: ByteWriter, tx: Transaction): void {
@@ -63,7 +74,7 @@ function serializeInputsOutputs(w: ByteWriter, tx: Transaction): void {
   }
   w.varInt(tx.outputs.length);
   for (const output of tx.outputs) {
-    assertSaneOutput(output);
+    assertSaneValue(output.value);
     w.u64le(output.value).varBytes(output.scriptPubKey);
   }
 }
@@ -142,9 +153,8 @@ export function parseTx(raw: Uint8Array): Transaction {
   for (let i = 0n; i < outputCount; i++) {
     const value = r.u64le();
     const scriptPubKey = r.varBytes();
-    const out = { value, scriptPubKey };
-    assertSaneOutput(out);
-    outputs.push(out);
+    assertSaneValue(value);
+    outputs.push({ value, scriptPubKey });
   }
 
   if (marker) {

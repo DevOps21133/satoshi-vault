@@ -58,8 +58,7 @@ export class EsploraClient {
         credentials: "omit",
         referrerPolicy: "no-referrer",
       });
-      const body = await res.text();
-      if (body.length > MAX_RESPONSE_BYTES) throw new Error("response too large");
+      const body = await readBodyCapped(res, MAX_RESPONSE_BYTES);
       if (!res.ok) throw new Error(`esplora ${res.status}: ${body.slice(0, 200)}`);
       return body;
     } finally {
@@ -154,6 +153,41 @@ export class EsploraClient {
     txidToBytes(txidHex);
     return txidHex;
   }
+}
+
+/**
+ * Read a response body with the size cap enforced DURING the read — a hostile
+ * server must not be able to balloon memory before a post-hoc length check.
+ */
+async function readBodyCapped(res: Response, maxBytes: number): Promise<string> {
+  const declared = res.headers.get("content-length");
+  if (declared && Number(declared) > maxBytes) throw new Error("response too large");
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    // Environment without streaming (e.g. a test mock) — cap after the fact.
+    const body = await res.text();
+    if (body.length > maxBytes) throw new Error("response too large");
+    return body;
+  }
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > maxBytes) {
+      void reader.cancel().catch(() => undefined);
+      throw new Error("response too large");
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 function assertSaneAddressString(address: string): void {

@@ -46,10 +46,14 @@ export const DEFAULT_KDF_PARAMS: KdfParams = {
   parallelism: 1,
 };
 
-/** Bounds accepted at decryption time — rejects downgrade/DoS parameter abuse. */
+/**
+ * Bounds accepted at decryption time — rejects downgrade/DoS parameter abuse.
+ * The memory ceiling is deliberately modest (256 MiB): a hostile blob claiming
+ * gigabytes would otherwise wedge or crash the unlock on low-memory devices.
+ */
 const KDF_BOUNDS = {
   timeCost: { min: 1, max: 16 },
-  memoryLog2KiB: { min: 13, max: 21 }, // 8 MiB .. 2 GiB
+  memoryLog2KiB: { min: 13, max: 18 }, // 8 MiB .. 256 MiB
   parallelism: { min: 1, max: 4 },
 };
 

@@ -12,8 +12,10 @@ export interface PasswordFields {
 }
 
 export function passwordFields(): PasswordFields {
-  const pw = el("input", { type: "password", autocomplete: "new-password", placeholder: `Min ${MIN_PASSWORD_LENGTH} characters` });
-  const confirm = el("input", { type: "password", autocomplete: "new-password", placeholder: "Repeat password" });
+  // autocomplete=off: the vault password must never be captured by a browser
+  // password manager (which may sync it to the cloud on a general-purpose OS).
+  const pw = el("input", { type: "password", autocomplete: "off", placeholder: `Min ${MIN_PASSWORD_LENGTH} characters` });
+  const confirm = el("input", { type: "password", autocomplete: "off", placeholder: "Repeat password" });
   const node = el(
     "div",
     { class: "stack" },

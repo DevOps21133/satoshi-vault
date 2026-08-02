@@ -75,7 +75,14 @@ export async function startScanner(
   video.muted = true;
   video.srcObject = stream;
   container.append(video);
-  await video.play();
+  try {
+    await video.play();
+  } catch (e) {
+    // Never leave the camera running with no handle to stop it.
+    for (const track of stream.getTracks()) track.stop();
+    video.remove();
+    throw e;
+  }
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });

@@ -19,8 +19,10 @@
  *   data into a hash chain is harmless) but it can no longer satisfy the
  *   collection target.
  * - Conservative credit accounting: sensor bytes are credited at 1 bit of
- *   min-entropy per 8 bytes (1/64 of their size in bits), and the target
- *   demands 2x the requested seed strength from sensors on top of the
+ *   min-entropy per 8 bytes (1/64 of their size in bits), capped at 64 bits
+ *   per sample so no single frame can satisfy the target, tallied per source,
+ *   and revoked retroactively if a source later fails its health tests. The
+ *   target demands 2x the requested seed strength from sensors on top of the
  *   CSPRNG bookends.
  */
 
@@ -105,7 +107,12 @@ export interface EntropyProgress {
 export class EntropyPool {
   private state: Uint8Array;
   private health = new Map<EntropySource, SourceHealth>();
-  private creditedBits = 0;
+  /**
+   * Credit is tallied per source and summed only over currently-healthy
+   * sources, so a source that fails a health test AFTER earning credit is
+   * retroactively revoked — its earlier samples are no longer trusted.
+   */
+  private creditBySource = new Map<EntropySource, number>();
   private readonly targetBits: number;
   private extracted = false;
 
@@ -132,8 +139,12 @@ export class EntropyPool {
       }
       monitor.absorb(data);
       if (!monitor.failed) {
-        // Conservative credit: 1 bit per 8 bytes, capped per sample.
-        this.creditedBits += Math.min(Math.floor(data.length / 8), 256);
+        // Conservative credit: 1 bit per 8 bytes, capped at 64 bits per
+        // sample. The low cap forces MANY samples over time (a single large
+        // camera frame must not satisfy the target on its own), giving the
+        // health tests a real data series to judge.
+        const prev = this.creditBySource.get(source) ?? 0;
+        this.creditBySource.set(source, prev + Math.min(Math.floor(data.length / 8), 64));
       }
     }
     const lenTag = new TextEncoder().encode(`/${data.length}/`);
@@ -142,11 +153,21 @@ export class EntropyPool {
     this.state = next;
   }
 
+  /** Sum of credit from sources that are healthy RIGHT NOW. */
+  private creditedBits(): number {
+    let total = 0;
+    for (const [source, bits] of this.creditBySource) {
+      if (!this.health.get(source)?.failed) total += bits;
+    }
+    return total;
+  }
+
   progress(): EntropyProgress {
     const failedSources = [...this.health.entries()].filter(([, h]) => h.failed).map(([s]) => s);
+    const credited = this.creditedBits();
     return {
-      ratio: Math.min(1, this.creditedBits / this.targetBits),
-      creditedBits: this.creditedBits,
+      ratio: Math.min(1, credited / this.targetBits),
+      creditedBits: credited,
       targetBits: this.targetBits,
       failedSources,
     };
@@ -159,7 +180,7 @@ export class EntropyPool {
    */
   extract(bytes: 16 | 20 | 24 | 28 | 32): Uint8Array {
     if (this.extracted) throw new Error("pool already extracted");
-    if (this.creditedBits < this.targetBits) {
+    if (this.creditedBits() < this.targetBits) {
       throw new Error("not enough sensor entropy collected");
     }
     const final = sha256(

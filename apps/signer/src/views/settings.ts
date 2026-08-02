@@ -20,7 +20,7 @@ export function settingsView(app: AppCtx): View {
   });
 
   // --- reveal backup ---------------------------------------------------------
-  const revealPw = el("input", { type: "password", autocomplete: "current-password", placeholder: "Vault password" });
+  const revealPw = el("input", { type: "password", autocomplete: "off", placeholder: "Vault password" });
   const revealBox = el("div", {});
   const revealBtn = el("button", { class: "ghost" }, "Reveal Recovery Words") as HTMLButtonElement;
   revealBtn.addEventListener("click", () => {

@@ -22,6 +22,7 @@ import {
   ChunkAssembler,
   decodeAddress,
   encodeChunks,
+  FrameParseError,
   NETWORKS,
   serializePsbt,
   WatchAccount,
@@ -44,7 +45,11 @@ export function sendView(
 
   let animator: AnimatedQr | null = null;
   let scanner: ScannerHandle | null = null;
+  // Bumped on every destroy so a camera start still in flight is stopped
+  // instead of leaking a live camera with no owner.
+  let scanGen = 0;
   const destroy = () => {
+    scanGen++;
     animator?.stop();
     animator = null;
     scanner?.stop();
@@ -108,7 +113,11 @@ export function sendView(
           submit.setAttribute("disabled", "");
           submit.textContent = "Building…";
           try {
-            const recipient = decodeAddress(addressInput.value.trim(), network);
+            // Read the field ONCE: the same string is decoded, built against
+            // and shown on the review screen — the input cannot change between
+            // validation and display while buildSend awaits the network.
+            const addressText = addressInput.value.trim();
+            const recipient = decodeAddress(addressText, network);
             const amount = parseBtcAmount(amountInput.value);
             const feeRate = Number(feeInput.value);
             if (!Number.isFinite(feeRate) || feeRate < 1 || feeRate > 5000) {
@@ -125,7 +134,7 @@ export function sendView(
               changeIndex: state.nextChange,
               client,
             });
-            stepReview(built, addressInput.value.trim(), amount);
+            stepReview(built, addressText, amount);
           } catch (e) {
             toast(e instanceof Error ? e.message : "Could not build transaction");
             submit.removeAttribute("disabled");
@@ -236,13 +245,19 @@ export function sendView(
       el("button", { class: "ghost", onclick: () => app.showAccount(account) }, "Cancel"),
     );
 
+    const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
       try {
         const p = assembler.add(text);
         if (p.total > 0) stats.textContent = `${p.received} / ${p.total} frames`;
-      } catch {
-        return; // not one of our QRs — ignore
+      } catch (e) {
+        if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
+        // Anything else from the assembler is a tampering signal: surface it.
+        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
+        assembler.reset();
+        stats.textContent = "Transfer rejected — waiting for the vault's signed-transaction QR…";
+        return;
       }
       if (assembler.isComplete()) {
         finished = true;
@@ -260,6 +275,10 @@ export function sendView(
         }
       }
     }).then((h) => {
+      if (gen !== scanGen) {
+        h.stop(); // view left while the camera was starting — release it
+        return;
+      }
       scanner = h;
     }).catch(() => {
       clear(videoBox);

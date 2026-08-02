@@ -16,8 +16,11 @@ import {
   encodeChunks,
   extractTx,
   finalizePsbt,
+  FrameParseError,
+  getBip32Derivations,
   getOutBip32Derivations,
   getOutTapBip32Derivations,
+  getTapBip32Derivations,
   hash160,
   HDPrivateKey,
   Network,
@@ -48,8 +51,12 @@ export function signView(app: AppCtx): View {
   const body = el("div", {});
   let scanner: ScannerHandle | null = null;
   let anim: AnimatedQr | null = null;
+  // Bumped on every destroy so a camera start still in flight (getUserMedia
+  // awaits) is stopped instead of leaking a live camera with no owner.
+  let scanGen = 0;
 
   const destroy = () => {
+    scanGen++;
     scanner?.stop();
     scanner = null;
     anim?.stop();
@@ -79,6 +86,7 @@ export function signView(app: AppCtx): View {
       el("button", { class: "ghost", onclick: () => app.show("home") }, "Cancel"),
     );
 
+    const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
       try {
@@ -87,8 +95,14 @@ export function signView(app: AppCtx): View {
           fill.style.width = `${Math.round(progress.ratio * 100)}%`;
           stats.textContent = `${progress.received} / ${progress.total} frames · ${progress.type}`;
         }
-      } catch {
-        return; // non-vault QR in view — ignore
+      } catch (e) {
+        if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
+        // Anything else from the assembler is a tampering signal: surface it.
+        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
+        assembler.reset();
+        fill.style.width = "0%";
+        stats.textContent = "Transfer rejected — waiting for frames…";
+        return;
       }
       if (assembler.isComplete()) {
         finished = true;
@@ -106,6 +120,10 @@ export function signView(app: AppCtx): View {
         }
       }
     }).then((h) => {
+      if (gen !== scanGen) {
+        h.stop(); // view left while the camera was starting — release it
+        return;
+      }
       scanner = h;
     }).catch(() => {
       clear(videoBox);
@@ -135,13 +153,14 @@ export function signView(app: AppCtx): View {
     }
 
     const totalIn = inputs.reduce((a, x) => a + x.amount, 0n);
+    const ownedAccounts = ownedAccountTuples(psbt, session.master, app.network);
     const outputs = psbt.tx.outputs.map((out, i) => ({
       address: scriptToAddress(out.scriptPubKey, app.network),
       amount: out.value,
-      change: classifyOutput(psbt, i, session.master, app.network),
+      change: classifyOutput(psbt, i, session.master, app.network, ownedAccounts),
     }));
-    const sendTotal = outputs.filter((o) => o.change !== "verified").reduce((a, o) => a + o.amount, 0n);
-    const hasMismatch = outputs.some((o) => o.change === "mismatch");
+    const sendTotal = outputs.filter((o) => o.change.status !== "verified").reduce((a, o) => a + o.amount, 0n);
+    const hasMismatch = outputs.some((o) => o.change.status === "mismatch");
 
     clear(body);
     body.append(
@@ -163,9 +182,11 @@ export function signView(app: AppCtx): View {
             {},
             el("div", { class: "row spread" },
               el("span", { class: "dim small" },
-                o.change === "verified" ? "Change (verified: returns to this vault)" : "Pays to"),
-              o.change === "verified" ? el("span", { class: "badge orange" }, "change ✓") : null,
-              o.change === "mismatch" ? el("span", { class: "badge red" }, "fake change") : null),
+                o.change.status === "verified"
+                  ? `Change (verified: returns to this vault at ${o.change.path})`
+                  : "Pays to"),
+              o.change.status === "verified" ? el("span", { class: "badge orange" }, "change ✓") : null,
+              o.change.status === "mismatch" ? el("span", { class: "badge red" }, "fake change") : null),
             el("div", { class: "addr" }, o.address ?? "(non-standard script)"),
             el("div", { class: "kv" }, el("span", { class: "k" }, "Amount"), el("span", { class: "v" }, amountNode(o.amount))),
           )),
@@ -241,65 +262,130 @@ export function signView(app: AppCtx): View {
   return { node: body, destroy };
 }
 
+type SpendType = "p2pkh" | "p2sh-p2wpkh" | "p2wpkh" | "p2tr";
+
+type ChangeStatus =
+  | { status: "verified"; path: string }
+  | { status: "mismatch" }
+  | { status: "foreign" };
+
+/** The standard output script this spend type pays to for a given pubkey. */
+function scriptForKey(spendType: SpendType, pubkey: Uint8Array): Uint8Array {
+  switch (spendType) {
+    case "p2pkh":
+      return p2pkhScript(hash160(pubkey));
+    case "p2sh-p2wpkh":
+      return p2shScript(hash160(p2shP2wpkhRedeemScript(pubkey)));
+    case "p2wpkh":
+      return p2wpkhScript(hash160(pubkey));
+    case "p2tr":
+      return p2trScript(taprootOutputKey(xOnly(pubkey)));
+  }
+}
+
+/** Derive the pubkey at an absolute path, wiping every intermediate node even on error. */
+function derivePubkey(master: HDPrivateKey, path: number[]): Uint8Array {
+  let node = master;
+  try {
+    for (const index of path) {
+      const next = node.deriveChild(index);
+      if (node !== master) node.wipe();
+      node = next;
+    }
+    return node.publicKey;
+  } finally {
+    if (node !== master) node.wipe();
+  }
+}
+
+function formatPath(path: number[]): string {
+  return "m/" + path.map((i) => (i >= HARDENED_OFFSET ? `${i - HARDENED_OFFSET}'` : `${i}`)).join("/");
+}
+
+/**
+ * Account tuples (purpose'/coin'/account') PROVEN to belong to this vault in
+ * this transaction: an input counts only when its derivation entry re-derives
+ * to a key that the input's prevout script actually pays. Change claims must
+ * land in one of these accounts — otherwise a PSBT author who merely knows the
+ * (public) fingerprint could steer "change" into an account the wallet is not
+ * watching, making the funds invisible to the user.
+ */
+function ownedAccountTuples(psbt: Psbt, master: HDPrivateKey, network: Network): Set<string> {
+  const tuples = new Set<string>();
+  for (let i = 0; i < psbt.tx.inputs.length; i++) {
+    const map = psbt.inputMaps[i];
+    if (!map) continue;
+    try {
+      const { prevout, spendType } = classifyInput(psbt, i);
+      const derivations = spendType === "p2tr" ? getTapBip32Derivations(map) : getBip32Derivations(map);
+      for (const d of derivations) {
+        if (d.masterFingerprint !== master.fingerprint || d.path.length !== 5) continue;
+        try {
+          validateSigningPath(d.path, spendType, network);
+          const pubkey = derivePubkey(master, d.path);
+          if (bytesEqual(scriptForKey(spendType, pubkey), prevout.scriptPubKey)) {
+            tuples.add(d.path.slice(0, 3).join("/"));
+          }
+        } catch {
+          continue; // an unprovable claim contributes nothing
+        }
+      }
+    } catch {
+      continue; // unclassifiable input — cannot prove ownership from it
+    }
+  }
+  return tuples;
+}
+
 /**
  * Change verification. A fingerprint is PUBLIC information, so a derivation
  * entry claiming "this output is your change" is never trusted on its own:
  * the signer re-derives the key at the claimed path (under the wallet path
- * policy) and checks that the output script really pays to it.
+ * policy), checks that the output script really pays to it, AND requires the
+ * claimed account to be one the transaction provably spends from.
  *
- * - "verified": derivation matches our keys — genuine change.
- * - "mismatch": claims our fingerprint but the script does NOT match — hostile.
+ * - "verified": derivation matches our keys in a spending account — genuine change.
+ * - "mismatch": claims our fingerprint but fails any check — hostile, surfaced loudly.
  * - "foreign":  no claim about our keys — a normal payment output.
+ *
+ * The whole classification runs inside try/catch: a malformed output map that
+ * makes any parser throw is treated as hostile ("mismatch"), never a crash.
  */
 function classifyOutput(
   psbt: Psbt,
   outputIndex: number,
   master: HDPrivateKey,
   network: Network,
-): "verified" | "mismatch" | "foreign" {
+  ownedAccounts: Set<string>,
+): ChangeStatus {
   const map = psbt.outputMaps[outputIndex];
   const out = psbt.tx.outputs[outputIndex];
-  if (!map || !out) return "foreign";
-  const claims = [...getOutBip32Derivations(map), ...getOutTapBip32Derivations(map)].filter(
-    (d) => d.masterFingerprint === master.fingerprint,
-  );
-  if (claims.length === 0) return "foreign";
+  if (!map || !out) return { status: "foreign" };
+  let claims;
+  try {
+    claims = [...getOutBip32Derivations(map), ...getOutTapBip32Derivations(map)].filter(
+      (d) => d.masterFingerprint === master.fingerprint,
+    );
+  } catch {
+    return { status: "mismatch" }; // malformed derivation entries are hostile input
+  }
+  if (claims.length === 0) return { status: "foreign" };
 
+  let verifiedPath: string | null = null;
   for (const claim of claims) {
     try {
-      if (claim.path.length !== 5) return "mismatch";
+      if (claim.path.length !== 5) return { status: "mismatch" };
       const purpose = claim.path[0]! - HARDENED_OFFSET;
       const spendType = SPEND_TYPE_BY_PURPOSE[purpose];
-      if (!spendType) return "mismatch";
+      if (!spendType) return { status: "mismatch" };
       validateSigningPath(claim.path, spendType, network);
-
-      let node = master;
-      for (const index of claim.path) {
-        const next = node.deriveChild(index);
-        if (node !== master) node.wipe();
-        node = next;
-      }
-      const pubkey = node.publicKey;
-      let expectedScript: Uint8Array;
-      switch (spendType) {
-        case "p2pkh":
-          expectedScript = p2pkhScript(hash160(pubkey));
-          break;
-        case "p2sh-p2wpkh":
-          expectedScript = p2shScript(hash160(p2shP2wpkhRedeemScript(pubkey)));
-          break;
-        case "p2wpkh":
-          expectedScript = p2wpkhScript(hash160(pubkey));
-          break;
-        case "p2tr":
-          expectedScript = p2trScript(taprootOutputKey(xOnly(pubkey)));
-          break;
-      }
-      node.wipe();
-      if (!bytesEqual(expectedScript, out.scriptPubKey)) return "mismatch";
+      if (!ownedAccounts.has(claim.path.slice(0, 3).join("/"))) return { status: "mismatch" };
+      const pubkey = derivePubkey(master, claim.path);
+      if (!bytesEqual(scriptForKey(spendType, pubkey), out.scriptPubKey)) return { status: "mismatch" };
+      verifiedPath = formatPath(claim.path);
     } catch {
-      return "mismatch";
+      return { status: "mismatch" };
     }
   }
-  return "verified";
+  return verifiedPath ? { status: "verified", path: verifiedPath } : { status: "foreign" };
 }

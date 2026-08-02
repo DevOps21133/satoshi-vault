@@ -108,7 +108,9 @@ function buildFixture(): Fixture {
     path: [44 + H, 0 + H, 0 + H, 0, 0],
   });
 
-  // input 1: p2sh-p2wpkh
+  // input 1: p2sh-p2wpkh — non_witness_utxo required for all non-taproot
+  // inputs (amount forgery defense); witness_utxo kept for compatibility.
+  setNonWitnessUtxo(psbt.inputMaps[1]!, serializeTx(fundingTx));
   setWitnessUtxo(psbt.inputMaps[1]!, fundingTx.outputs[1]!);
   setRedeemScript(psbt.inputMaps[1]!, p2shP2wpkhRedeemScript(keys.p2sh.publicKey));
   setBip32Derivation(psbt.inputMaps[1]!, {
@@ -118,6 +120,7 @@ function buildFixture(): Fixture {
   });
 
   // input 2: p2wpkh
+  setNonWitnessUtxo(psbt.inputMaps[2]!, serializeTx(fundingTx));
   setWitnessUtxo(psbt.inputMaps[2]!, fundingTx.outputs[2]!);
   setBip32Derivation(psbt.inputMaps[2]!, {
     pubkey: keys.p2wpkh.publicKey,
@@ -218,14 +221,79 @@ describe("PSBT signer refuses dangerous requests", () => {
     expect(() => psbtFee(psbt)).toThrow(/disagrees/);
   });
 
-  it("tampered amount after signing fails finalization", () => {
+  it("witness_utxo lie next to the full tx is caught immediately", () => {
     const { psbt, fundingTx, masterKey } = buildFixture();
     signPsbt(psbt, masterKey, MAINNET);
     setWitnessUtxo(psbt.inputMaps[2]!, {
       value: 5n, // lie about the amount the signature committed to
       scriptPubKey: fundingTx.outputs[2]!.scriptPubKey,
     });
+    expect(() => finalizePsbt(psbt)).toThrow(/disagrees/);
+    masterKey.wipe();
+  });
+
+  it("tampered taproot amount after signing fails finalization", () => {
+    const { psbt, fundingTx, masterKey } = buildFixture();
+    signPsbt(psbt, masterKey, MAINNET);
+    setWitnessUtxo(psbt.inputMaps[3]!, {
+      value: 5n, // taproot has no non_witness_utxo; the BIP341 sighash catches it
+      scriptPubKey: fundingTx.outputs[3]!.scriptPubKey,
+    });
     expect(() => finalizePsbt(psbt)).toThrow(/does not verify/);
+    masterKey.wipe();
+  });
+
+  it("segwit v0 input with only witness_utxo is refused (amount forgery defense)", () => {
+    const { psbt, masterKey } = buildFixture();
+    const map = psbt.inputMaps[2]!;
+    for (let i = map.length - 1; i >= 0; i--) {
+      if (map[i]!.key[0] === 0x00 && map[i]!.key.length === 1) map.splice(i, 1);
+    }
+    expect(() => signPsbt(psbt, masterKey, MAINNET)).toThrow(/requires non_witness_utxo/);
+    masterKey.wipe();
+  });
+
+  it("implausible address index is refused", () => {
+    expect(() => validateSigningPath([44 + H, 0 + H, 0 + H, 0, 5_000_000], "p2pkh", MAINNET)).toThrow(
+      /implausible address index/,
+    );
+  });
+
+  it("a forged derivation entry with a colliding fingerprint cannot block signing", () => {
+    const { psbt, masterKey } = buildFixture();
+    // Attacker adds a second entry claiming our fingerprint but a key we
+    // cannot reproduce — signing must skip it, not abort.
+    setBip32Derivation(psbt.inputMaps[2]!, {
+      pubkey: new Uint8Array(33).fill(2),
+      masterFingerprint: masterKey.fingerprint,
+      path: [84 + H, 0 + H, 0 + H, 0, 1],
+    });
+    const result = signPsbt(psbt, masterKey, MAINNET);
+    expect(result.signedInputs).toEqual([0, 1, 2, 3]);
+    masterKey.wipe();
+  });
+
+  it("pre-finalized inputs are refused by the finalizer", () => {
+    const { psbt, masterKey } = buildFixture();
+    signPsbt(psbt, masterKey, MAINNET);
+    setKeyPair(psbt.inputMaps[2]!, new Uint8Array([0x08]), new Uint8Array([0x00])); // FINAL_SCRIPTWITNESS
+    expect(() => finalizePsbt(psbt)).toThrow(/already finalized/);
+    masterKey.wipe();
+  });
+
+  it("a partial signature from a foreign key cannot be finalized", () => {
+    const { psbt, masterKey } = buildFixture();
+    signPsbt(psbt, masterKey, MAINNET);
+    const map = psbt.inputMaps[2]!;
+    for (const kp of map) {
+      if (kp.key[0] === 0x02 && kp.key.length === 34) {
+        // Re-attribute the signature to a different pubkey.
+        const forgedKey = kp.key.slice();
+        forgedKey.set(new Uint8Array(33).fill(3), 1);
+        kp.key = forgedKey;
+      }
+    }
+    expect(() => finalizePsbt(psbt)).toThrow(/does not match the prevout/);
     masterKey.wipe();
   });
 

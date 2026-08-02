@@ -44,6 +44,19 @@ export class Ceremony {
     cb.onProgress(this.pool.progress());
   }
 
+  /**
+   * Register a resource release. If stop() already ran (it can race the
+   * getUserMedia/play awaits), the release runs IMMEDIATELY — otherwise the
+   * camera/microphone would stay live with no owner.
+   */
+  private addCleanup(fn: () => void): void {
+    if (this.stopped) {
+      fn();
+      return;
+    }
+    this.cleanups.push(fn);
+  }
+
   private async startCamera(container: HTMLElement, cb: CeremonyCallbacks): Promise<void> {
     let stream: MediaStream;
     try {
@@ -55,21 +68,23 @@ export class Ceremony {
       cb.onSensorError("camera", "Camera unavailable — grant access for stronger entropy.");
       return;
     }
-    if (this.stopped) {
+    this.addCleanup(() => {
       for (const t of stream.getTracks()) t.stop();
-      return;
-    }
+    });
+    if (this.stopped) return;
     const video = document.createElement("video");
     video.className = "scanner";
     video.setAttribute("playsinline", "");
     video.muted = true;
     video.srcObject = stream;
     container.append(video);
+    this.addCleanup(() => video.remove());
     try {
       await video.play();
     } catch {
       cb.onSensorError("camera", "Camera preview failed to start.");
     }
+    if (this.stopped) return;
 
     const canvas = document.createElement("canvas");
     canvas.width = CAMERA_SIDE;
@@ -90,11 +105,7 @@ export class Ceremony {
       this.absorb("camera", rgb, cb);
     }, CAMERA_INTERVAL_MS);
 
-    this.cleanups.push(() => {
-      clearInterval(timer);
-      for (const t of stream.getTracks()) t.stop();
-      video.remove();
-    });
+    this.addCleanup(() => clearInterval(timer));
   }
 
   private async startMicrophone(cb: CeremonyCallbacks): Promise<void> {
@@ -108,10 +119,10 @@ export class Ceremony {
       cb.onSensorError("microphone", "Microphone unavailable — grant access for stronger entropy.");
       return;
     }
-    if (this.stopped) {
+    this.addCleanup(() => {
       for (const t of stream.getTracks()) t.stop();
-      return;
-    }
+    });
+    if (this.stopped) return;
     const audioCtx = new AudioContext();
     const sourceNode = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
@@ -128,11 +139,10 @@ export class Ceremony {
       cb.onMicLevel(Math.min(1, sum / buf.length / 24));
     }, MIC_INTERVAL_MS);
 
-    this.cleanups.push(() => {
+    this.addCleanup(() => {
       clearInterval(timer);
       sourceNode.disconnect();
       void audioCtx.close();
-      for (const t of stream.getTracks()) t.stop();
     });
   }
 

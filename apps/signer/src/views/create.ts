@@ -15,8 +15,15 @@ import { passwordFields } from "./password";
 export function createView(app: AppCtx): View {
   const body = el("div", {});
   let ceremony: Ceremony | null = null;
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearHideTimer = () => {
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = null;
+  };
 
   const destroy = () => {
+    clearHideTimer();
     ceremony?.stop(true);
     ceremony = null;
   };
@@ -129,7 +136,28 @@ export function createView(app: AppCtx): View {
   };
 
   // --- step 3: show the words ------------------------------------------------
+  const HIDE_AFTER_MS = 90_000;
   const stepBackup = (words: string[], usePassphrase: boolean) => {
+    // The words auto-hide after a short window: an unattended or
+    // shoulder-surfed screen must not display the seed indefinitely.
+    const holder = el("div", {});
+    const showWords = () => {
+      clearHideTimer();
+      clear(holder);
+      holder.append(el("div", { class: "words" },
+        ...words.map((w, i) => el("div", { class: "w" }, el("b", {}, String(i + 1)), w))));
+      hideTimer = setTimeout(hideWords, HIDE_AFTER_MS);
+    };
+    const hideWords = () => {
+      clearHideTimer();
+      clear(holder);
+      holder.append(
+        el("div", { class: "banner warn" }, "Words hidden automatically (screen-exposure protection)."),
+        el("button", { class: "ghost", onclick: showWords }, "Reveal Again"),
+      );
+    };
+    showWords();
+
     clear(body);
     body.append(
       el(
@@ -139,11 +167,10 @@ export function createView(app: AppCtx): View {
         el("div", { class: "banner bad" },
           "Write these words on paper, in order. Anyone with these words can take your bitcoin. " +
           "Never photograph them, never type them into an online device."),
-        el("div", { class: "words" },
-          ...words.map((w, i) => el("div", { class: "w" }, el("b", {}, String(i + 1)), w))),
+        holder,
       ),
-      el("button", { class: "primary", onclick: () => stepQuiz(words, usePassphrase) }, "I Wrote Them Down"),
-      el("button", { class: "ghost", onclick: () => { toast("Seed discarded"); app.show("lock"); } }, "Abort"),
+      el("button", { class: "primary", onclick: () => { clearHideTimer(); stepQuiz(words, usePassphrase); } }, "I Wrote Them Down"),
+      el("button", { class: "ghost", onclick: () => { clearHideTimer(); toast("Seed discarded"); app.show("lock"); } }, "Abort"),
     );
   };
 

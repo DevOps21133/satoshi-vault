@@ -4,7 +4,7 @@
  * Wallet app never holds private key material at all.
  */
 
-import { AccountExport, accountExportFromJson, NetworkName, NETWORKS } from "@satoshivault/core";
+import { AccountExport, accountExportFromJson, decodeAddress, NetworkName, NETWORKS } from "@satoshivault/core";
 
 const ACCOUNTS_KEY = "satoshivault.wallet.accounts";
 const ESPLORA_KEY_PREFIX = "satoshivault.wallet.esplora.";
@@ -17,7 +17,9 @@ export interface StoredAccount {
 }
 
 export function accountId(data: AccountExport): string {
-  return `${data.masterFingerprint}:${data.path}:${data.network}`;
+  // The xpub is part of the identity: fingerprints are only 32 bits, so two
+  // different vaults (or a colliding forgery) must never merge into one id.
+  return `${data.masterFingerprint}:${data.path}:${data.network}:${data.xpub}`;
 }
 
 export function loadAccounts(): StoredAccount[] {
@@ -120,13 +122,24 @@ export function loadBook(): BookEntry[] {
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  return parsed.filter(
-    (e): e is BookEntry =>
-      typeof e === "object" && e !== null &&
-      typeof (e as Record<string, unknown>)["label"] === "string" &&
-      typeof (e as Record<string, unknown>)["address"] === "string" &&
-      typeof (e as Record<string, unknown>)["network"] === "string",
-  );
+  // localStorage is hostile after any storage tampering: every entry must
+  // still decode as a valid address on its claimed network, or it is dropped —
+  // a poisoned book entry must never reach the recipient field.
+  return parsed.filter((e): e is BookEntry => {
+    if (typeof e !== "object" || e === null) return false;
+    const o = e as Record<string, unknown>;
+    if (typeof o["label"] !== "string" || typeof o["address"] !== "string" || typeof o["network"] !== "string") {
+      return false;
+    }
+    const network = NETWORKS[o["network"] as NetworkName];
+    if (!network) return false;
+    try {
+      decodeAddress(o["address"], network);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function saveBook(entries: BookEntry[]): void {

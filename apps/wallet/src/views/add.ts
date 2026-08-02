@@ -5,15 +5,19 @@
  */
 
 import { clear, el, startScanner, toast, ScannerHandle } from "@satoshivault/ui";
-import { accountExportFromJson, AccountExport, ChunkAssembler, WatchAccount } from "@satoshivault/core";
+import { accountExportFromJson, AccountExport, ChunkAssembler, FrameParseError, WatchAccount } from "@satoshivault/core";
 import { AppCtx, View } from "../types";
 import { addAccount } from "../store";
 
 export function addView(app: AppCtx): View {
   const body = el("div", {});
   let scanner: ScannerHandle | null = null;
+  // Bumped on every destroy so a camera start still in flight is stopped
+  // instead of leaking a live camera with no owner.
+  let scanGen = 0;
 
   const destroy = () => {
+    scanGen++;
     scanner?.stop();
     scanner = null;
   };
@@ -38,12 +42,17 @@ export function addView(app: AppCtx): View {
       el("button", { class: "ghost", onclick: () => app.show("home") }, "Cancel"),
     );
 
+    const gen = scanGen;
     startScanner(videoBox, (text) => {
       if (finished) return;
       try {
         const p = assembler.add(text);
         if (p.total > 0) stats.textContent = `${p.received} / ${p.total} frames`;
-      } catch {
+      } catch (e) {
+        if (e instanceof FrameParseError) return; // stray non-vault QR — ignore
+        toast(e instanceof Error ? e.message : "Corrupted transfer — restarting scan");
+        assembler.reset();
+        stats.textContent = "Transfer rejected — waiting for the Signer's export QR…";
         return;
       }
       if (assembler.isComplete()) {
@@ -63,6 +72,10 @@ export function addView(app: AppCtx): View {
         }
       }
     }).then((h) => {
+      if (gen !== scanGen) {
+        h.stop(); // view left while the camera was starting — release it
+        return;
+      }
       scanner = h;
     }).catch(() => {
       clear(videoBox);

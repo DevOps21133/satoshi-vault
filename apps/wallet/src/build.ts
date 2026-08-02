@@ -232,6 +232,9 @@ export function verifySignedTx(raw: Uint8Array, psbt: Psbt): { tx: Transaction; 
     if (!bytesEqual(a.prevTxid, b.prevTxid) || a.prevVout !== b.prevVout) {
       throw new Error("signed tx spends different coins than requested");
     }
+    if (a.sequence !== b.sequence) {
+      throw new Error("signed tx sequence differs from the reviewed transaction (RBF flag tampered)");
+    }
   }
   for (let i = 0; i < tx.outputs.length; i++) {
     const a = tx.outputs[i]!;
