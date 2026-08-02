@@ -69,11 +69,16 @@ jobs:
           cp out/satoshi-vault-signer.apk out/satoshi-vault-wallet.apk out/SHA256SUMS.txt apk/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # `chmod +x gradlew` and `cap sync` dirty tracked files; ignore mode
+          # bits and stage nothing but the APKs.
+          git config core.fileMode false
           git add -f apk/
           if git diff --cached --quiet; then
             echo "APKs unchanged — nothing to commit"
           else
             git commit -m "build: refresh APKs in apk/ from ${GITHUB_SHA::7} [skip ci]"
+            # Drop every other build-time modification so the rebase is clean.
+            git checkout -- .
             # main may have moved while gradle ran — rebase this single commit on top.
             git fetch origin main
             git rebase origin/main

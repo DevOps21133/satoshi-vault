@@ -29,6 +29,33 @@ describe("entropy pool", () => {
     expect(validateMnemonic(words).ok).toBe(true);
   });
 
+  it("256-bit extraction yields a valid 24-word mnemonic", () => {
+    const pool = new EntropyPool(256);
+    while (pool.progress().ratio < 1) pool.addSample("camera", randomBytes(4096));
+    const entropy = pool.extract(32);
+    expect(entropy.length).toBe(32); // exactly 256 bits
+    const words = entropyToMnemonic(entropy);
+    expect(words.length).toBe(24);
+    expect(validateMnemonic(words).ok).toBe(true);
+  });
+
+  it("sensor data alone never determines the seed (CSPRNG always mixed in)", () => {
+    // Two pools fed byte-identical sensor input must still produce different
+    // entropy: user actions can only ADD to the OS CSPRNG, never replace it.
+    // This is what stops a predictable or hostile sensor from fixing the seed.
+    const scripted = Array.from({ length: 32 }, (_, i) => {
+      const b = new Uint8Array(4096);
+      for (let j = 0; j < b.length; j++) b[j] = (i * 31 + j * 7) & 0xff;
+      return b;
+    });
+    const run = () => {
+      const pool = new EntropyPool(256);
+      for (const sample of scripted) pool.addSample("camera", sample.slice());
+      return bytesToHex(pool.extract(32));
+    };
+    expect(run()).not.toBe(run());
+  });
+
   it("refuses extraction before the sensor target is met", () => {
     const pool = new EntropyPool(128);
     pool.addSample("camera", randomBytes(64));
