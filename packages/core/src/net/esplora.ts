@@ -13,7 +13,7 @@
  * - No cookies, no credentials, no redirects.
  */
 
-import { txidToBytes } from "../tx/tx.js";
+import { MAX_MONEY, txidToBytes } from "../tx/tx.js";
 
 const MAX_RESPONSE_BYTES = 5_000_000;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -47,6 +47,9 @@ export class EsploraClient {
     if (url.protocol !== "https:" && url.protocol !== "http:") {
       throw new Error("esplora URL must be http(s)");
     }
+    // Paths are appended by string concatenation, so a query or fragment in the
+    // configured endpoint would silently corrupt every request path.
+    if (url.search || url.hash) throw new Error("esplora URL must not contain a query or fragment");
     this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
 
@@ -130,7 +133,8 @@ export class EsploraClient {
     const height = o["block_height"];
     return {
       confirmed,
-      blockHeight: typeof height === "number" && Number.isSafeInteger(height) ? height : null,
+      // Same bound as parseUtxo: a negative height is not a height.
+      blockHeight: typeof height === "number" && Number.isSafeInteger(height) && height >= 0 ? height : null,
     };
   }
 
@@ -208,7 +212,11 @@ function parseUtxo(entry: unknown): EsploraUtxo {
   if (typeof vout !== "number" || !Number.isSafeInteger(vout) || vout < 0 || vout > 100_000) {
     throw new Error("malformed UTXO vout");
   }
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+  // The MAX_MONEY ceiling matters: without it a hostile or compromised server
+  // can report a single UTXO worth ~90 million BTC. That fabricated coin would
+  // be summed into the displayed balance and offered to coin selection; the
+  // spend then dead-ends far downstream. Reject it here, where it is a lie.
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || BigInt(value) > MAX_MONEY) {
     throw new Error("malformed UTXO value");
   }
   const status = o["status"];

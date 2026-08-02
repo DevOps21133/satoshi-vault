@@ -51,6 +51,17 @@ export function accountView(app: AppCtx, account: StoredAccount): View {
         el("div", { class: "addr" }, address),
         el("p", { class: "dim small" },
           `Address #${state.nextReceive} — a fresh address for every payment protects your privacy.`),
+        // Every receive address is derived from the imported xpub. Nothing in a
+        // watch-only app can prove that xpub is really this vault's, so the
+        // origin is shown for out-of-band comparison: if these two lines do not
+        // match the Signer's export screen, the account was swapped and the
+        // funds would land in someone else's wallet.
+        el("div", { class: "kv" }, el("span", { class: "k" }, "Signer fingerprint"),
+          el("span", { class: "v" }, account.data.masterFingerprint)),
+        el("div", { class: "kv" }, el("span", { class: "k" }, "Account path"),
+          el("span", { class: "v" }, `${account.data.path} · ${account.data.scriptType}`)),
+        el("p", { class: "dim small" },
+          "Check the fingerprint and path against the Signer before receiving a large amount."),
         el("button", {
           class: "ghost",
           onclick: () => {

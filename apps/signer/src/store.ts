@@ -40,7 +40,11 @@ export function saveNetworkName(name: NetworkName): void {
 
 export function loadNetworkName(): NetworkName {
   const raw = localStorage.getItem(NETWORK_KEY);
-  return raw && raw in NETWORKS ? (raw as NetworkName) : "mainnet";
+  // hasOwnProperty, not `in`: `in` also matches inherited Object.prototype
+  // members, so a stored value of "constructor" or "toString" would be
+  // accepted as a network name and index to undefined.
+  const known = raw !== null && Object.prototype.hasOwnProperty.call(NETWORKS, raw);
+  return known ? (raw as NetworkName) : "mainnet";
 }
 
 /**

@@ -17,6 +17,13 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // A debuggable APK lets anyone with USB access run `adb run-as` and
+            // read the app's private storage (the encrypted vault), and makes
+            // Capacitor enable WebView remote debugging — arbitrary JS inside an
+            // unlocked Signer. The published test builds must never carry it.
+            debuggable false
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

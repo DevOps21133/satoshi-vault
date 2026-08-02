@@ -20,8 +20,17 @@ export function settingsView(app: AppCtx): View {
   });
 
   // --- reveal backup ---------------------------------------------------------
+  // Displayed seed words auto-hide, exactly like the create flow: words left on
+  // a screen are the single most valuable thing a shoulder-surfer can find.
+  const REVEAL_TIMEOUT_MS = 90 * 1000;
   const revealPw = el("input", { type: "password", autocomplete: "off", placeholder: "Vault password" });
   const revealBox = el("div", {});
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  const hideWords = () => {
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = undefined;
+    clear(revealBox);
+  };
   const revealBtn = el("button", { class: "ghost" }, "Reveal Recovery Words") as HTMLButtonElement;
   revealBtn.addEventListener("click", () => {
     void (async () => {
@@ -36,13 +45,15 @@ export function settingsView(app: AppCtx): View {
         await new Promise((r) => setTimeout(r, 30));
         const words = await revealWords(blob, revealPw.value);
         revealPw.value = "";
-        clear(revealBox);
+        hideWords();
         revealBox.append(
-          el("div", { class: "banner bad" }, "Anyone seeing these words can take your bitcoin."),
+          el("div", { class: "banner bad" },
+            "Anyone seeing these words can take your bitcoin. They hide automatically in 90 seconds."),
           el("div", { class: "words" },
             ...words.map((w, i) => el("div", { class: "w" }, el("b", {}, String(i + 1)), w))),
-          el("button", { class: "ghost", onclick: () => clear(revealBox) }, "Hide"),
+          el("button", { class: "ghost", onclick: hideWords }, "Hide"),
         );
+        hideTimer = setTimeout(hideWords, REVEAL_TIMEOUT_MS);
       } catch {
         toast("Unable to decrypt — wrong password?");
       } finally {
@@ -102,5 +113,5 @@ export function settingsView(app: AppCtx): View {
         el("span", { class: "v" }, "blocked by CSP (connect-src 'none')")),
     ),
   );
-  return { node };
+  return { node, destroy: hideWords };
 }

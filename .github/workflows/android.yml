@@ -10,26 +10,31 @@ on:
       - "package-lock.json"
   workflow_dispatch:
 
+# Least privilege by default. Only the publish job, which touches nothing but
+# already-built artifacts, is granted write access.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-apks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Every action is pinned to a full commit SHA: a moved tag would otherwise
+      # let a third party run arbitrary code in the job that builds the binaries
+      # people install to hold their bitcoin.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Install (locked)
         run: npm ci
@@ -53,6 +58,37 @@ jobs:
       - name: Build Wallet APK
         run: cd apps/wallet/android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
 
+      # These properties are the whole security posture of the shipped binaries,
+      # so assert them against the built APK rather than the source: a
+      # dependency's manifest merge could reintroduce either one silently.
+      - name: Assert APK manifests
+        run: |
+          set -euo pipefail
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          signer=apps/signer/android/app/build/outputs/apk/debug/app-debug.apk
+          wallet=apps/wallet/android/app/build/outputs/apk/debug/app-debug.apk
+
+          if "$aapt2" dump permissions "$signer" | grep -q "android.permission.INTERNET"; then
+            echo "::error::Signer APK requests INTERNET — the OS-enforced air gap is broken"
+            "$aapt2" dump permissions "$signer"
+            exit 1
+          fi
+          echo "Signer: no INTERNET permission"
+
+          if ! "$aapt2" dump permissions "$wallet" | grep -q "android.permission.INTERNET"; then
+            echo "::error::Wallet APK lost INTERNET — it cannot reach a node"
+            exit 1
+          fi
+          echo "Wallet: INTERNET present as expected"
+
+          for apk in "$signer" "$wallet"; do
+            if "$aapt2" dump badging "$apk" | grep -q "application-debuggable"; then
+              echo "::error::$apk is debuggable — adb run-as could read its private storage"
+              exit 1
+            fi
+          done
+          echo "Both APKs: not debuggable"
+
       - name: Collect APKs
         run: |
           mkdir -p out
@@ -60,6 +96,25 @@ jobs:
           cp apps/wallet/android/app/build/outputs/apk/debug/app-debug.apk out/satoshi-vault-wallet.apk
           sha256sum out/*.apk | sed 's| out/| |' > out/SHA256SUMS.txt
           cat out/SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: satoshi-vault-apks
+          path: out/
+
+  publish:
+    needs: build-apks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: satoshi-vault-apks
+          path: out
 
       # The APKs also live in the repository itself (apk/), so anyone browsing
       # the project sees the installable builds without hunting for a release.
@@ -69,27 +124,16 @@ jobs:
           cp out/satoshi-vault-signer.apk out/satoshi-vault-wallet.apk out/SHA256SUMS.txt apk/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # `chmod +x gradlew` and `cap sync` dirty tracked files; ignore mode
-          # bits and stage nothing but the APKs.
-          git config core.fileMode false
           git add -f apk/
           if git diff --cached --quiet; then
             echo "APKs unchanged — nothing to commit"
           else
             git commit -m "build: refresh APKs in apk/ from ${GITHUB_SHA::7} [skip ci]"
-            # Drop every other build-time modification so the rebase is clean.
-            git checkout -- .
             # main may have moved while gradle ran — rebase this single commit on top.
             git fetch origin main
             git rebase origin/main
             git push origin HEAD:main
           fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: satoshi-vault-apks
-          path: out/
 
       - name: Publish rolling release
         env:
@@ -97,6 +141,6 @@ jobs:
         run: |
           gh release create apk-latest \
             --title "Satoshi Vault APKs (latest main)" \
-            --notes "Debug-signed test builds of the Signer and Wallet apps, rebuilt on every push to main. Install: enable 'install unknown apps', download, open. The Signer APK requests NO internet permission — Android itself enforces the air gap. These builds are for testing; uninstall the previous build before installing a new one (debug signatures differ between CI runs)." \
+            --notes "Debug-signed test builds of the Signer and Wallet apps, rebuilt on every push to main. Install: enable 'install unknown apps', download, open. The Signer APK requests NO internet permission — Android itself enforces the air gap — and neither APK is debuggable. These builds are for testing; uninstall the previous build before installing a new one (debug signatures differ between CI runs)." \
             --prerelease || true
           gh release upload apk-latest out/satoshi-vault-signer.apk out/satoshi-vault-wallet.apk out/SHA256SUMS.txt --clobber

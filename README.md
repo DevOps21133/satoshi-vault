@@ -1,6 +1,6 @@
 <div align="center">
 
-# ₿
+<img src="docs/icon-signer.png" alt="Satoshi Vault Signer icon" width="112"> <img src="docs/icon-wallet.png" alt="Satoshi Vault Wallet icon" width="112">
 
 # SATOSHI VAULT
 
@@ -37,7 +37,9 @@ The only channel between them is **animated QR codes**, in both directions. The 
 - **Encrypted vault**: Argon2id (64 MiB, t=3) → AES-256-GCM, header authenticated as AAD.
 - Electrum-style **Esplora** backends (blockstream.info / mempool.space / your own node), configurable per network.
 - **mainnet · testnet · signet · regtest**.
+- **Abnormal-fee alarm**: the Signer computes the effective sat/vB and the fee as a share of the coins being spent, and a transaction that looks like a fee-drain attack cannot be signed without a second, explicit confirmation.
 - Address book, watch-only account import via QR, idle auto-lock, memory zeroization of key material.
+- **Device hardening** (Signer): `FLAG_SECURE` on every screen — no screenshots, no screen recording, no thumbnail in the recents list; locks within 30 seconds of going to the background and immediately on page hide; the shipped APKs are **not debuggable**, so `adb run-as` cannot read the encrypted vault and WebView remote debugging is off.
 - **Zero** telemetry, analytics, cloud services, accounts, or tracking of any kind.
 
 ## Quick start
@@ -48,7 +50,7 @@ Requires Node.js ≥ 20.
 git clone https://github.com/DevOps21133/satoshi-vault
 cd satoshi-vault
 npm install
-npm test                      # 148 tests incl. official BIP vectors
+npm test                      # 160 tests incl. official BIP vectors
 
 npm run dev -w @satoshivault/signer   # http://localhost:5180  (put THIS device offline)
 npm run dev -w @satoshivault/wallet   # http://localhost:5181
@@ -97,6 +99,12 @@ Read the full documents: [Threat Model](docs/THREAT_MODEL.md) · [Architecture](
 
 This software is open source under the [MIT license](LICENSE) so you can audit every line. It has **not yet received a third-party security audit** — treat it accordingly: start on testnet/signet, use small amounts first, and keep your seed words on paper regardless of any software.
 
+Known limitations, stated plainly:
+
+- The published APKs are **debug-signed test builds**. Signatures differ between CI runs, so Android will not upgrade one over another — uninstall first.
+- Restoring a seed means typing words into a WebView text field, and Android keyboards can add typed words to their **learning dictionary**. Restore on a device whose keyboard learning you have disabled or cleared, or use a keyboard without it.
+- The Wallet does not use `FLAG_SECURE`: it holds no secrets and you may legitimately want to screenshot it. Treat balances and addresses shown there as visible to screen-capturing software.
+
 Satoshi Vault is a from-scratch implementation; **no code was copied from any wallet project**.
 
 ## Reporting a vulnerability
@@ -111,7 +119,7 @@ Satoshi Vault is free, open source, and will never monetize you — no telemetry
 bc1quh3humfcqfh7gh3v8d784e29av24y0vl540qcf
 ```
 
-(Bitcoin mainnet, native SegWit P2WPKH. The same address is shown with a QR code in the Wallet app under **Settings → Support Development**.)
+(Bitcoin mainnet, native SegWit P2WPKH. The same address is pinned to the bottom of **every screen of both apps**, with a copy button, and additionally as a QR code in the Wallet under **Settings → Support Development**.)
 
 ---
 

@@ -261,16 +261,64 @@ describe("PSBT signer refuses dangerous requests", () => {
 
   it("a forged derivation entry with a colliding fingerprint cannot block signing", () => {
     const { psbt, masterKey } = buildFixture();
-    // Attacker adds a second entry claiming our fingerprint but a key we
-    // cannot reproduce — signing must skip it, not abort.
-    setBip32Derivation(psbt.inputMaps[2]!, {
+    const map = psbt.inputMaps[2]!;
+    // The attacker writes the PSBT, so they choose the byte ORDER too: the
+    // forged entry goes FIRST. It claims our (public) fingerprint, carries a
+    // key we cannot reproduce, and declares a path that violates the wallet
+    // policy (44' purpose on a p2wpkh input). Signing must skip it and sign
+    // every legitimate input — appending it instead would make this test pass
+    // without ever exercising the hostile ordering.
+    setBip32Derivation(map, {
       pubkey: new Uint8Array(33).fill(2),
       masterFingerprint: masterKey.fingerprint,
-      path: [84 + H, 0 + H, 0 + H, 0, 1],
+      path: [44 + H, 0 + H, 0 + H, 0, 1],
     });
+    map.unshift(map.pop()!);
     const result = signPsbt(psbt, masterKey, MAINNET);
     expect(result.signedInputs).toEqual([0, 1, 2, 3]);
     masterKey.wipe();
+  });
+
+  it("a malformed derivation entry only costs its own input", () => {
+    const { psbt, masterKey } = buildFixture();
+    // A 7-byte value cannot be (fingerprint || path). Parsing it throws, and
+    // that throw must not take down the signing of the other three inputs.
+    const key = new Uint8Array(34);
+    key[0] = 0x06; // PSBT_IN_BIP32_DERIVATION
+    key.set(new Uint8Array(33).fill(4), 1);
+    setKeyPair(psbt.inputMaps[2]!, key, new Uint8Array(7));
+    const result = signPsbt(psbt, masterKey, MAINNET);
+    expect(result.signedInputs).toEqual([0, 1, 3]);
+    masterKey.wipe();
+  });
+
+  it("a policy-violating path for a key that IS ours is still fatal", () => {
+    const { psbt, masterKey } = buildFixture();
+    const map = psbt.inputMaps[2]!;
+    // A key that genuinely IS ours (m/44'/0'/0'/0/0 reproduces this pubkey)
+    // pointed at a p2wpkh input. Unlike a forgery we cannot reproduce, this one
+    // survives the pubkey check, so the only thing standing between the vault
+    // and signing off-policy is validateSigningPath — and it must throw rather
+    // than sign. The entry goes FIRST so it is reached before the legitimate
+    // 84' entry short-circuits the loop.
+    const legacyKey = masterKey.derivePath("44'/0'/0'/0/0");
+    setBip32Derivation(map, {
+      pubkey: legacyKey.publicKey,
+      masterFingerprint: masterKey.fingerprint,
+      path: [44 + H, 0 + H, 0 + H, 0, 0],
+    });
+    map.unshift(map.pop()!);
+    legacyKey.wipe();
+    expect(() => signPsbt(psbt, masterKey, MAINNET)).toThrow(/purpose/);
+    masterKey.wipe();
+  });
+
+  it("a PSBT spending the same outpoint twice is rejected at parse", () => {
+    const { psbt } = buildFixture();
+    // Duplicate outpoint: psbtFee would count the same prevout value twice and
+    // show the human a plausible fee for a transaction that can never confirm.
+    psbt.tx.inputs[1] = { ...psbt.tx.inputs[0]! };
+    expect(() => parsePsbt(serializePsbt(psbt))).toThrow(/same outpoint twice/);
   });
 
   it("pre-finalized inputs are refused by the finalizer", () => {

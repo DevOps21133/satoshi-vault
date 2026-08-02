@@ -8,9 +8,10 @@
  * the path policy, prevout binding and sighash allow-list independently.
  */
 
-import { AnimatedQr, amountNode, clear, el, startScanner, toast, ScannerHandle } from "@satoshivault/ui";
+import { AnimatedQr, amountNode, clear, el, formatSats, startScanner, toast, ScannerHandle } from "@satoshivault/ui";
 import {
   bytesEqual,
+  estimateVsize,
   ChunkAssembler,
   classifyInput,
   encodeChunks,
@@ -192,6 +193,29 @@ export function signView(app: AppCtx): View {
     }));
     const sendTotal = outputs.filter((o) => o.change.status !== "verified").reduce((a, o) => a + o.amount, 0n);
     const hasMismatch = outputs.some((o) => o.change.status === "mismatch");
+    const feeCheck = assessFee(fee, totalIn, inputs.map((i) => i.spendType as SpendType), psbt);
+
+    // An abnormal fee is the one hostile change a compromised Wallet can make
+    // with every address and amount otherwise honest: the miner takes the coin
+    // instead of the attacker. It passes every other check here, so it needs
+    // its own alarm and a second, deliberate confirmation.
+    let feeConfirmed = false;
+    const signButton = el(
+      "button",
+      {
+        class: feeCheck.alarming ? "danger" : "primary",
+        onclick: () => {
+          if (feeCheck.alarming && !feeConfirmed) {
+            feeConfirmed = true;
+            signButton.textContent = `Confirm: pay ${formatSats(fee)} sat in fees and sign`;
+            toast("Abnormal fee — press again to confirm");
+            return;
+          }
+          stepSign(psbt);
+        },
+      },
+      "Sign Transaction",
+    );
 
     clear(body);
     body.append(
@@ -227,15 +251,27 @@ export function signView(app: AppCtx): View {
         el("div", { class: "kv" }, el("span", { class: "k" }, "Total in"), el("span", { class: "v" }, amountNode(totalIn))),
         el("div", { class: "kv" }, el("span", { class: "k" }, "Sending"), el("span", { class: "v" }, amountNode(sendTotal))),
         el("div", { class: "kv" }, el("span", { class: "k" }, "Network fee"), el("span", { class: "v" }, amountNode(fee))),
+        el("div", { class: "kv" }, el("span", { class: "k" }, "Fee rate"),
+          el("span", { class: "v" }, `≈ ${feeCheck.rate.toFixed(1)} sat/vB · ${(feeCheck.share * 100).toFixed(1)}% of the amount spent`)),
         el("div", { class: "kv" }, el("span", { class: "k" }, "Network"), el("span", { class: "v" }, app.network.name)),
+        feeCheck.alarming
+          ? el("div", { class: "banner bad" },
+              `⚠ ABNORMAL FEE — this transaction pays ${formatSats(fee)} sat to miners (${feeCheck.reason}). ` +
+              "A fee that large is normally a sign that the wallet building this transaction was tampered with. " +
+              "The fee is NOT recoverable once broadcast. Reject unless you set this fee deliberately.")
+          : null,
       ),
-      el("button", { class: "primary", onclick: () => stepSign(psbt) }, "Sign Transaction"),
+      signButton,
       el("button", { class: "danger", onclick: () => { toast("Rejected — nothing was signed"); app.show("home"); } }, "Reject"),
     );
   };
 
   // --- step 3: sign and present the result -----------------------------------
   const stepSign = (psbt: Psbt) => {
+    // A second tap before the re-render would otherwise leave the previous
+    // AnimatedQr's interval running forever with no node to draw into.
+    anim?.stop();
+    anim = null;
     let frames: string[];
     let summary: HTMLElement;
     try {
@@ -294,6 +330,36 @@ export function signView(app: AppCtx): View {
 }
 
 type SpendType = "p2pkh" | "p2sh-p2wpkh" | "p2wpkh" | "p2tr";
+
+/**
+ * Fee sanity thresholds. Deliberately generous — the goal is to catch the
+ * "wallet was tampered with" case (fee off by orders of magnitude), never to
+ * nag someone paying a genuinely urgent fee during a mempool spike.
+ */
+const HIGH_FEE_SATS = 100_000n; // ~ absurd for any ordinary payment
+const HIGH_FEE_RATE = 300; // sat/vB — far above any normal congestion
+const HIGH_FEE_SHARE = 0.1; // 10% of the coins being moved
+
+interface FeeCheck {
+  /** Estimated fee rate in sat/vB (signatures do not exist yet, so this is an estimate). */
+  rate: number;
+  /** Fee as a fraction of the total input value. */
+  share: number;
+  alarming: boolean;
+  /** Human-readable statement of which threshold tripped. */
+  reason: string;
+}
+
+function assessFee(fee: bigint, totalIn: bigint, spendTypes: SpendType[], psbt: Psbt): FeeCheck {
+  const vsize = estimateVsize(spendTypes, psbt.tx.outputs.map((o) => o.scriptPubKey.length));
+  const rate = vsize > 0 ? Number(fee) / vsize : 0;
+  const share = totalIn > 0n ? Number(fee) / Number(totalIn) : 0;
+  const reasons: string[] = [];
+  if (fee > HIGH_FEE_SATS) reasons.push(`over ${formatSats(HIGH_FEE_SATS)} sat`);
+  if (rate > HIGH_FEE_RATE) reasons.push(`≈ ${rate.toFixed(0)} sat/vB`);
+  if (share > HIGH_FEE_SHARE) reasons.push(`${(share * 100).toFixed(1)}% of the coins being spent`);
+  return { rate, share, alarming: reasons.length > 0, reason: reasons.join(", ") };
+}
 
 type ChangeStatus =
   | { status: "verified"; path: string }

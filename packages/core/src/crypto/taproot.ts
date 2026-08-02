@@ -31,7 +31,9 @@ function bigIntTo32(n: bigint): Uint8Array {
 
 /** 32-byte x-only public key from a 33-byte compressed key. */
 export function xOnly(pubkey33: Uint8Array): Uint8Array {
-  if (pubkey33.length === 32) return pubkey33;
+  // Always a copy: returning the caller's array would let a stored reference
+  // (e.g. in a PSBT derivation entry) alias memory the caller may reuse or wipe.
+  if (pubkey33.length === 32) return pubkey33.slice();
   if (pubkey33.length !== 33) throw new Error("expected 32/33-byte public key");
   return pubkey33.slice(1);
 }

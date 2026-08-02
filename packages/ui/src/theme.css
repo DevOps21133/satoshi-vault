@@ -286,6 +286,27 @@ nav.tabs button {
 }
 nav.tabs button.active { color: var(--btc); }
 
+/* --- persistent donation footer ------------------------------ */
+
+footer.donate-bar {
+  margin: 26px 0 8px;
+  padding: 14px;
+  text-align: center;
+  border: 1px dashed var(--btc);
+  border-radius: var(--radius-sm);
+  background: rgba(247, 147, 26, 0.05);
+}
+footer.donate-bar .donate-title {
+  color: var(--btc);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+footer.donate-bar .donate-addr { margin: 10px 0; font-size: 12.5px; }
+footer.donate-bar button { width: auto; margin: 0 auto; }
+
 /* --- banners / toast ----------------------------------------- */
 
 .banner {

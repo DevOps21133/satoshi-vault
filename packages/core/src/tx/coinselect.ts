@@ -27,7 +27,7 @@ export interface Utxo {
 export const INPUT_VSIZE: Record<SpendType, number> = {
   p2pkh: 148,
   "p2sh-p2wpkh": 91,
-  p2wpkh: 68,
+  p2wpkh: 68.25, // 41 base bytes + 109 witness bytes / 4
   p2tr: 57.5,
 };
 

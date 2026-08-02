@@ -1,11 +1,8 @@
 /** Wallet settings: per-network Esplora endpoints, and the privacy story. */
 
-import { clear, el, renderQr, toast } from "@satoshivault/ui";
+import { clear, DONATION_ADDRESS, el, renderQr, toast } from "@satoshivault/ui";
 import { AppCtx, View } from "../types";
 import { DEFAULT_ESPLORA, esploraUrl, networkNames, setEsploraUrl } from "../store";
-
-/** Project donation address (mainnet P2WPKH, checksum-verified in CI builds). */
-export const DONATION_ADDRESS = "bc1quh3humfcqfh7gh3v8d784e29av24y0vl540qcf";
 
 export function settingsView(_app: AppCtx): View {
   const body = el("div", {});

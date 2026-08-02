@@ -177,6 +177,18 @@ export function parsePsbt(raw: Uint8Array): Psbt {
   for (let i = 0; i < tx.outputs.length; i++) outputMaps.push(readMap(r));
   if (!r.isDone()) throw new Error("trailing bytes after PSBT");
 
+  // Two inputs spending the SAME outpoint would be counted twice by psbtFee, so
+  // a transaction spending one 100k-sat coin "twice" can be presented to the
+  // human reviewer with a perfectly plausible fee. Every signature would be
+  // valid and the transaction still consensus-invalid: the user completes the
+  // whole air-gap ceremony for something that can never confirm.
+  const outpoints = new Set<string>();
+  for (const input of tx.inputs) {
+    const id = `${bytesToHex(input.prevTxid)}:${input.prevVout}`;
+    if (outpoints.has(id)) throw new Error("PSBT spends the same outpoint twice");
+    outpoints.add(id);
+  }
+
   const psbt: Psbt = { tx, globalMap, inputMaps, outputMaps };
   // Validate any provided utxo fields up front so garbage fails fast.
   for (let i = 0; i < tx.inputs.length; i++) resolvePrevout(psbt, i);
@@ -230,9 +242,10 @@ function parseDerivationValue(value: Uint8Array): { masterFingerprint: number; p
   if (value.length < 4 || (value.length - 4) % 4 !== 0) throw new Error("malformed BIP32 derivation");
   const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
   const masterFingerprint = view.getUint32(0, false);
+  // Depth is known from the length — check it BEFORE materialising the array.
+  if ((value.length - 4) / 4 > 255) throw new Error("derivation path too deep");
   const path: number[] = [];
   for (let off = 4; off < value.length; off += 4) path.push(view.getUint32(off, true));
-  if (path.length > 255) throw new Error("derivation path too deep");
   return { masterFingerprint, path };
 }
 
@@ -487,6 +500,15 @@ export interface SignPsbtResult {
 /**
  * Sign every input that belongs to `master` (matched by fingerprint) under
  * the wallet path policy. Inputs owned by other wallets are left untouched.
+ *
+ * Scope, so callers do not assume protection that lives elsewhere: this
+ * function enforces *cryptographic* correctness (amounts committed by the
+ * sighash, prevouts verified against their txids, paths matched to the script
+ * type, signatures verified after signing). It deliberately applies NO policy
+ * about what the transaction means — there is no fee ceiling and no change
+ * verification here. Those are human decisions and live in the Signer's review
+ * screen, which shows the destination, the change re-derivation result and the
+ * fee, and demands a second confirmation for an abnormal fee.
  */
 export function signPsbt(psbt: Psbt, master: HDPrivateKey, network: Network): SignPsbtResult {
   // Fee must be fully known before we sign anything at all.
@@ -517,23 +539,46 @@ export function signPsbt(psbt: Psbt, master: HDPrivateKey, network: Network): Si
       if (!allowed) throw new Error(`refusing sighash type 0x${t.toString(16)}`);
     }
 
-    const derivations = spendType === "p2tr" ? getTapBip32Derivations(map) : getBip32Derivations(map);
+    // A malformed derivation entry belongs to whoever wrote it — it must not
+    // take down the signing of inputs that are perfectly fine, including inputs
+    // this wallet does not even own.
+    let derivations: Bip32Derivation[];
+    try {
+      derivations = spendType === "p2tr" ? getTapBip32Derivations(map) : getBip32Derivations(map);
+    } catch {
+      continue;
+    }
     const ours = derivations.filter((d) => d.masterFingerprint === masterFingerprint);
     if (ours.length === 0) continue;
 
-    // Master fingerprints are only 32 bits, so another wallet's entry can
-    // collide with ours. Every candidate path must satisfy the wallet policy
-    // (steering attempts fail loudly), but an entry whose key we cannot
-    // reproduce is treated as someone else's, not as fatal — otherwise a
-    // hostile PSBT could block signing entirely with a forged entry.
+    // Master fingerprints are only 32 bits and are PUBLIC, so anyone can write
+    // an entry carrying ours. An entry whose key we cannot reproduce is treated
+    // as someone else's and skipped, never as fatal — otherwise a hostile PSBT
+    // could block signing entirely by listing one forged entry first.
+    //
+    // Order matters here: the path policy is enforced only AFTER the key is
+    // proven to be ours. Checking it first would let a forged, policy-violating
+    // entry throw out of the whole call (a denial of service the PSBT author
+    // fully controls, since they control the byte order of the map).
     let child: HDPrivateKey | undefined;
     let pubkey: Uint8Array | undefined;
     for (const derivation of ours) {
-      validateSigningPath(derivation.path, spendType, network);
+      // Cheap structural bound before any elliptic-curve work: every path this
+      // wallet can sign is exactly 5 levels, so a forged 255-level entry costs
+      // nothing to reject and cannot be used to burn CPU.
+      if (derivation.path.length !== 5) continue;
       const candidate = deriveByIndices(master, derivation.path);
       const candidatePubkey = candidate.publicKey;
       const expectedPubkey = spendType === "p2tr" ? xOnly(candidatePubkey) : candidatePubkey;
       if (bytesEqual(expectedPubkey, derivation.pubkey)) {
+        // Proven ours: from here a policy violation IS fatal, because it means
+        // someone is trying to steer this vault's own key off its wallet paths.
+        try {
+          validateSigningPath(derivation.path, spendType, network);
+        } catch (e) {
+          candidate.wipe();
+          throw e;
+        }
         child = candidate;
         pubkey = candidatePubkey;
         break;

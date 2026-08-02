@@ -17,6 +17,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // No debuggable flag in published builds: it would allow `adb run-as`
+            // access to the app's private storage and WebView remote debugging.
+            debuggable false
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

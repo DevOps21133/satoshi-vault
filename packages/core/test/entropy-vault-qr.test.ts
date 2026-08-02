@@ -4,6 +4,7 @@ import { encryptVault, decryptVault, KdfParams } from "../src/vault/vault.js";
 import { encodeChunks, parseFrame, ChunkAssembler } from "../src/qr/chunks.js";
 import { entropyToMnemonic, validateMnemonic } from "../src/bip39/mnemonic.js";
 import { bytesToHex } from "../src/util/bytes.js";
+import { sha256 } from "@noble/hashes/sha2";
 
 function randomBytes(n: number): Uint8Array {
   const b = new Uint8Array(n);
@@ -43,9 +44,14 @@ describe("entropy pool", () => {
     // Two pools fed byte-identical sensor input must still produce different
     // entropy: user actions can only ADD to the OS CSPRNG, never replace it.
     // This is what stops a predictable or hostile sensor from fixing the seed.
+    // Deterministic across both runs (a hash keystream, not the OS CSPRNG) yet
+    // structurally healthy, so the samples earn full credit and the pools are
+    // genuinely fed byte-identical sensor data.
     const scripted = Array.from({ length: 32 }, (_, i) => {
       const b = new Uint8Array(4096);
-      for (let j = 0; j < b.length; j++) b[j] = (i * 31 + j * 7) & 0xff;
+      for (let block = 0; block * 32 < b.length; block++) {
+        b.set(sha256(new Uint8Array([i, block & 0xff, block >> 8])), block * 32);
+      }
       return b;
     });
     const run = () => {
@@ -102,6 +108,35 @@ describe("entropy pool", () => {
     for (let i = 0; i < biased.length; i++) biased[i] = i % 10 === 0 ? 1 + (i % 250) : 0;
     pool.addSample("accelerometer", biased);
     expect(pool.progress().failedSources).toContain("accelerometer");
+  });
+
+  it("a periodic source earns no credit (structural screen beyond 800-90B)", () => {
+    // Neither the repetition count test nor the adaptive proportion test sees
+    // anything wrong with these: no value repeats 21 times in a row, and no
+    // value dominates 80% of a window. They carry no entropy whatsoever.
+    const alternating = new Uint8Array(4096);
+    for (let i = 0; i < alternating.length; i++) alternating[i] = i % 2 === 0 ? 0x00 : 0xff;
+    const sawtooth = new Uint8Array(4096);
+    for (let i = 0; i < sawtooth.length; i++) sawtooth[i] = i & 0xff;
+
+    for (const pattern of [alternating, sawtooth]) {
+      const pool = new EntropyPool(256);
+      for (let i = 0; i < 40; i++) pool.addSample("camera", pattern.slice());
+      const progress = pool.progress();
+      expect(progress.failedSources).toContain("camera");
+      expect(progress.creditedBits).toBe(0);
+      expect(() => pool.extract(32)).toThrow(/not enough/);
+    }
+  });
+
+  it("real random samples are never rejected by the periodicity screen", () => {
+    // The screen must not fire on genuine sensor data, including the short
+    // 64-byte pointer batches the ceremony emits.
+    for (const size of [64, 256, 4096]) {
+      const pool = new EntropyPool(128);
+      pool.addSample("touch", randomBytes(size));
+      expect(pool.progress().failedSources).toEqual([]);
+    }
   });
 
   it("progress reports per-source credit, zeroed for failed sources", () => {

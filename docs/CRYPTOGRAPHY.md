@@ -27,8 +27,11 @@ Paul Miller (audits by Cure53 et al. — see each repo's `audit/` directory).
 pool = SHA-256 sponge
 absorb: camera frames (RGB, alpha stripped), mic PCM, pointer deltas+jitter,
         device motion, 32 bytes OS CSPRNG (always)
-health: repetition-count + adaptive-proportion per source (SP 800-90B-style);
-        unhealthy sources are excluded from the entropy *estimate* — including
+health: repetition-count + adaptive-proportion per source (SP 800-90B-style),
+        plus a structural screen the 800-90B tests provably miss: a sample with
+        too few distinct byte values, or one that repeats exactly at any lag up
+        to 256 (a stuck 8-bit counter, 00 ff 00 ff …, a sawtooth), is dead.
+        Unhealthy sources are excluded from the entropy *estimate* — including
         RETROACTIVELY (a source that fails later loses all credit it earned) —
         but their bytes still mix in (can't hurt, per the sponge argument)
 credit: 1 bit per 8 sample bytes, capped at 64 bits per sample, so a single

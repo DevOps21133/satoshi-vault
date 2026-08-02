@@ -13,10 +13,11 @@
  *   length, so sources cannot impersonate each other and concatenation
  *   ambiguity is impossible.
  * - Continuous health tests per NIST SP 800-90B on each sensor source
- *   (Repetition Count Test + Adaptive Proportion Test). A failing source
- *   stops earning entropy credit — its data is still absorbed (mixing bad
- *   data into a hash chain is harmless) but it can no longer satisfy the
- *   collection target.
+ *   (Repetition Count Test + Adaptive Proportion Test), plus a structural
+ *   screen for periodic sources, which the two 800-90B tests do not detect.
+ *   A failing source stops earning entropy credit — its data is still absorbed
+ *   (mixing bad data into a hash chain is harmless) but it can no longer
+ *   satisfy the collection target.
  * - Conservative credit accounting: sensor bytes are credited at 1 bit of
  *   min-entropy per 8 bytes (1/64 of their size in bits), capped at 64 bits
  *   per sample so no single frame can satisfy the target, tallied per source,
@@ -60,8 +61,45 @@ class SourceHealth {
   private aptSeen = 0;
   failed = false;
 
+  /**
+   * Structural screen for the case the 800-90B tests provably miss: a PERIODIC
+   * source. RCT only catches a constant stream and APT only catches a heavy
+   * single-value bias, so a sensor emitting 00 ff 00 ff … or a 0..255 sawtooth
+   * passes both at full credit while carrying no entropy at all. Two cheap
+   * checks close that: too few distinct byte values, and exact repetition at
+   * any lag up to 256 (the longest cycle a byte-valued counter can have).
+   */
+  private static isStructurallyDead(data: Uint8Array): boolean {
+    if (data.length < 32) return false; // too short to judge fairly
+    const seen = new Set<number>();
+    for (const byte of data) seen.add(byte);
+    const required = Math.min(16, Math.max(4, Math.floor(data.length / 8)));
+    if (seen.size < required) return true;
+    // Search every period a byte-valued source can plausibly cycle at: a free-
+    // running 8-bit counter repeats at 256, which uses all 256 values and so
+    // sails past the distinct-value check above. Work is bounded by scanning at
+    // most the first 4 KiB, i.e. 256 x 4096 comparisons worst case.
+    const limit = Math.min(data.length, 4096);
+    const maxPeriod = Math.min(256, limit - 1);
+    for (let period = 1; period <= maxPeriod; period++) {
+      let periodic = true;
+      for (let i = period; i < limit; i++) {
+        if (data[i] !== data[i - period]) {
+          periodic = false;
+          break;
+        }
+      }
+      if (periodic) return true;
+    }
+    return false;
+  }
+
   absorb(data: Uint8Array): void {
     if (this.failed) return;
+    if (SourceHealth.isStructurallyDead(data)) {
+      this.failed = true;
+      return;
+    }
     for (const byte of data) {
       // Repetition Count Test
       if (byte === this.lastByte) {

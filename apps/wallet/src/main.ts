@@ -8,7 +8,7 @@
  */
 
 import "@satoshivault/ui/theme.css";
-import { brand, el, mount } from "@satoshivault/ui";
+import { brand, donateFooter, el, mount } from "@satoshivault/ui";
 import { EsploraClient, NetworkName } from "@satoshivault/core";
 import { AppCtx, View } from "./types";
 import { esploraUrl, StoredAccount } from "./store";
@@ -73,7 +73,7 @@ function tabs(): HTMLElement {
 function present(view: View): void {
   activeView?.destroy?.();
   activeView = view;
-  mount(root, brand("Wallet · Watch-Only"), view.node, tabs());
+  mount(root, brand("Wallet · Watch-Only"), view.node, donateFooter(), tabs());
 }
 
 app.show("home");
