@@ -10,9 +10,11 @@
 
 *No telemetry, no cloud, no accounts, no KYC — ever.*
 
-Big claim. Every line is public, MIT-licensed and written from scratch — so verify it: [threat model](docs/THREAT_MODEL.md) · [cryptography](docs/CRYPTOGRAPHY.md) · [dependencies](docs/DEPENDENCIES.md) · [audit checklist](docs/AUDIT_CHECKLIST.md) · [tests](packages/core/test)
+## 🌐 **[devops21133.github.io/satoshi-vault](https://devops21133.github.io/satoshi-vault/)**
 
-**[satoshi-vault website →](https://devops21133.github.io/satoshi-vault/)** · [download the APKs](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)
+**[⬇ Download the APKs](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)** · [How it works](https://devops21133.github.io/satoshi-vault/#howto) · [Screenshots](https://devops21133.github.io/satoshi-vault/#screenshots)
+
+Big claim. Every line is public, MIT-licensed and written from scratch — so verify it: [threat model](docs/THREAT_MODEL.md) · [cryptography](docs/CRYPTOGRAPHY.md) · [dependencies](docs/DEPENDENCIES.md) · [audit checklist](docs/AUDIT_CHECKLIST.md) · [tests](packages/core/test)
 
 </div>
 
