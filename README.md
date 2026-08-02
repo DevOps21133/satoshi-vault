@@ -8,6 +8,8 @@
 
 *Cold Signer + Watch-Only Wallet · QR-only signing channel · No telemetry, no cloud, no KYC — ever.*
 
+**[satoshi-vault website →](https://devops21133.github.io/satoshi-vault/)** · [download the APKs](https://github.com/DevOps21133/satoshi-vault/releases/tag/apk-latest)
+
 </div>
 
 ---
