@@ -3,11 +3,15 @@ name: Android APKs
 on:
   push:
     branches: [main]
-    paths:
-      - "packages/**"
-      - "apps/**"
-      - ".github/workflows/android.yml"
-      - "package-lock.json"
+    # Docs-only pushes must not create a run at all. An include-style `paths:`
+    # list made GitHub register a startup-failed run (a red 0s x) on every
+    # README/SECURITY/docs commit even though no APK work was due; `paths-ignore`
+    # skips those pushes cleanly instead. Anything outside this list — code under
+    # packages/ or apps/, this workflow, the lockfile — still triggers a build.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
   workflow_dispatch:
 
 # Least privilege by default. Only the publish job, which touches nothing but
