@@ -145,8 +145,6 @@ jobs:
         run: |
           gh release create apk-latest \
             --title "Satoshi Vault APKs (latest main)" \
-            --notes "Website: https://devops21133.github.io/satoshi-vault/ — mission, how-to and screenshots. Source: https://github.com/DevOps21133/satoshi-vault
-
-Debug-signed test builds of the Signer and Wallet apps, rebuilt on every push to main. Install: enable 'install unknown apps', download, open. The Signer APK requests NO internet permission — Android itself enforces the air gap — and neither APK is debuggable. These builds are for testing; uninstall the previous build before installing a new one (debug signatures differ between CI runs)." \
+            --notes "Website: https://devops21133.github.io/satoshi-vault/ — mission, how-to and screenshots. Source: https://github.com/DevOps21133/satoshi-vault . Debug-signed test builds of the Signer and Wallet apps, rebuilt on every push to main. Install: enable 'install unknown apps', download, open. The Signer APK requests NO internet permission — Android itself enforces the air gap — and neither APK is debuggable. These builds are for testing; uninstall the previous build before installing a new one (debug signatures differ between CI runs)." \
             --prerelease || true
           gh release upload apk-latest out/satoshi-vault-signer.apk out/satoshi-vault-wallet.apk out/SHA256SUMS.txt --clobber
